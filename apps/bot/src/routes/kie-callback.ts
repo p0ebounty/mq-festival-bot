@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { callbackTaskId, ingestRemote, parseTaskRecord, verifyWebhook, type CallbackBody } from '@mq/core';
 import type { AppContext } from '../context.js';
+import { env } from '../env.js';
 
 /**
  * Приём callback от kie.ai о завершении генерации.
@@ -18,7 +19,7 @@ export function registerKieCallback(app: FastifyInstance, ctx: AppContext): void
     const body = req.body as CallbackBody | null;
     const taskId = callbackTaskId(body);
 
-    const hmacKey = await ctx.settings.get('kie.webhookHmacKey');
+    const hmacKey = env.KIE_WEBHOOK_HMAC_KEY;
     if (hmacKey) {
       const v = verifyWebhook({
         taskId,

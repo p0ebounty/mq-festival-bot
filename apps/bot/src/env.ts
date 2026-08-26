@@ -17,6 +17,10 @@ const schema = z.object({
   KIE_API_BASE: z.string().url().default('https://api.kie.ai'),
   KIE_CLAUDE_BASE: z.string().url().default('https://api.kie.ai/claude'),
   KIE_API_KEY: z.string().optional(),
+  // HMAC-ключ вебхука kie.ai (генерируется на kie.ai/settings).
+  // Секрет времени деплоя, а не «крутилка» — поэтому в .env, а не в админке.
+  // Пустой = подпись не проверяется, callback принимается по совпадению taskId.
+  KIE_WEBHOOK_HMAC_KEY: z.string().default(''),
   MEDIA_ROOT: z.string().min(1),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
