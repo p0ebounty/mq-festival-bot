@@ -10,9 +10,6 @@ export const SETTINGS_SCHEMA = {
   // packages/core/src/images/router.ts в коде, детерминированно и с
   // цепочкой запасных. Разрешение — там же (Quality → 1K/2K). См. ADR 0006.
   'kie.apiKey':    { type: 'secret', default: '',                label: 'API-ключ kie.ai' },
-  // Генерируется на kie.ai/settings. Без него callback принимается только
-  // по совпадению taskId — слабее, поэтому в проде ключ обязателен.
-  'kie.webhookHmacKey': { type: 'secret', default: '',            label: 'HMAC-ключ вебхука' },
   'kie.chatModel': { type: 'string', default: 'claude-sonnet-5', label: 'Модель агента' },
 
   // ── экономика токенов ──
