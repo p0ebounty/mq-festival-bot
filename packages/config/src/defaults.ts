@@ -6,10 +6,11 @@ import { z } from 'zod';
  */
 export const SETTINGS_SCHEMA = {
   // ── провайдер ──
-  'kie.apiKey':       { type: 'secret', default: '',                 label: 'API-ключ kie.ai' },
-  'kie.chatModel':    { type: 'string', default: 'claude-opus-5',    label: 'Модель агента' },
-  'kie.imageModel':   { type: 'string', default: 'nano-banana-2',    label: 'Модель генерации картинок' },
-  'kie.imageResolution': { type: 'enum', default: '1K', options: ['1K', '2K', '4K'], label: 'Разрешение' },
+  // Модель КАРТИНОК здесь намеренно отсутствует: выбор делает
+  // packages/core/src/images/router.ts в коде, детерминированно и с
+  // цепочкой запасных. Разрешение — там же (Quality → 1K/2K). См. ADR 0006.
+  'kie.apiKey':    { type: 'secret', default: '',                label: 'API-ключ kie.ai' },
+  'kie.chatModel': { type: 'string', default: 'claude-sonnet-5', label: 'Модель агента' },
 
   // ── экономика токенов ──
   'economy.startBalance':  { type: 'int', default: 10, min: 0, max: 1000, label: 'Стартовый баланс' },
