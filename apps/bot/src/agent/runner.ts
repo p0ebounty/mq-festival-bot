@@ -56,6 +56,8 @@ export async function handleIncoming(
   const conversation = await app.conversations.current(user.id, msg.chatId, 30);
 
   const history = await app.conversations.history(conversation.id, historyLimit);
+  // Фото могло прийти сообщением раньше, чем просьба «сделай меня космонавтом».
+  const lastImageUrl = msg.imageUrls?.[0] ?? (await app.conversations.lastImageUrl(conversation.id)) ?? undefined;
   const priorMessages: AgentMessage[] = history
     .filter((m) => m.role !== 'system' && (m.text ?? '').length > 0)
     .map((m): AgentMessage => ({
@@ -98,6 +100,7 @@ export async function handleIncoming(
         conversationId: conversation.id,
         chatId: msg.chatId,
         userMessage: msg.text,
+        lastImageUrl,
         log: { info: (o, m) => log.info(o as object, m), warn: (o, m) => log.warn(o as object, m) },
       },
     });

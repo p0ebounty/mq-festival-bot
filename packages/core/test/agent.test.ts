@@ -222,3 +222,32 @@ describe('провайдер OpenAI-совместимого чата', () => {
     expect(sent.messages[0]).toEqual({ role: 'system', content: 'ПРАВИЛА' });
   });
 });
+
+describe('честность про неудачу инструмента', () => {
+  it('отказ помечается явно, чтобы модель не приняла его за успех', async () => {
+    const failing: AgentTool<Record<string, never>> = {
+      name: 'fails', description: 'всегда отказывает', input: z.object({}), parameters: {},
+      async run() { return { ok: false, summary: 'Уже готовится другая картинка.', error: 'busy' }; },
+    };
+    const p = fakeProvider([callTool('fails', {}), say('понял, подожду')]);
+    const r = await runAgent({ provider: p, registry: new ToolRegistry().register(failing),
+      system: 's', messages: [{ role: 'user', text: 'x' }], toolContext: ctx });
+
+    const toolMsg = r.newMessages.find((m) => m.role === 'tool');
+    const payload = JSON.parse(toolMsg!.text!) as Record<string, unknown>;
+    expect(payload.ok).toBe(false);
+    expect(payload.outcome).toBe('НЕ ВЫПОЛНЕНО');
+    expect(String(payload.instruction)).toContain('НЕ обещай результат');
+    // причина доезжает до модели дословно
+    expect(String(payload.reason)).toContain('Уже готовится другая картинка');
+  });
+
+  it('успех остаётся простым и не мусорит служебными полями', async () => {
+    const p = fakeProvider([callTool('echo', { text: 'ку' }), say('готово')]);
+    const r = await runAgent({ provider: p, registry: new ToolRegistry().register(echoTool),
+      system: 's', messages: [{ role: 'user', text: 'x' }], toolContext: ctx });
+    const payload = JSON.parse(r.newMessages.find((m) => m.role === 'tool')!.text!) as Record<string, unknown>;
+    expect(payload.ok).toBe(true);
+    expect(payload.outcome).toBeUndefined();
+  });
+});

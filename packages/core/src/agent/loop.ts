@@ -86,10 +86,21 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentRunResult> {
 
     for (const { call, result, durationMs } of results) {
       traces.push({ id: call.id, name: call.name, input: call.input, result, durationMs });
+      // При неудаче помечаем результат так, чтобы модель не могла принять его
+      // за успех: наблюдалось, как агент отвечал «уже делаю», хотя инструмент
+      // вернул отказ, и участник ждал картинку, которой не будет.
+      const payload = result.ok
+        ? { ok: true, summary: result.summary, ...(result.data ?? {}) }
+        : {
+            ok: false,
+            outcome: 'НЕ ВЫПОЛНЕНО',
+            reason: result.summary,
+            instruction: 'Действие НЕ произошло. Объясни это участнику своими словами и НЕ обещай результат.',
+          };
       const toolMsg: AgentMessage = {
         role: 'tool',
         toolCallId: call.id,
-        text: JSON.stringify({ ok: result.ok, summary: result.summary, ...(result.data ?? {}) }),
+        text: JSON.stringify(payload),
       };
       working.push(toolMsg);
       newMessages.push(toolMsg);

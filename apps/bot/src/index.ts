@@ -9,6 +9,11 @@ import { createBot } from './bot/index.js';
 import { makeDeliverer } from './bot/deliver.js';
 import { makeGetBalanceTool } from './agent/tools/get-balance.js';
 import { makeGenerateImageTool } from './agent/tools/generate-image.js';
+import {
+  makeListProfessionsTool, makeRestylePhotoTool,
+  makeGetBaseWorldTool, makeTransformWorldTool,
+} from './agent/tools/scenarios.js';
+import { makeMediaSender, makeMediaUploader } from './bot/media-out.js';
 
 const app = Fastify({
   logger: {
@@ -38,10 +43,16 @@ registerMediaRoutes(app, ctx);
 // Набор инструментов агента. Каждый — одно намерение, без флагов-переключателей.
 ctx.registry
   .register(makeGetBalanceTool(ctx))
-  .register(makeGenerateImageTool(ctx));
+  .register(makeGenerateImageTool(ctx))
+  .register(makeListProfessionsTool(ctx))
+  .register(makeRestylePhotoTool(ctx))
+  .register(makeGetBaseWorldTool(ctx))
+  .register(makeTransformWorldTool(ctx));
 
 const { bot } = createBot(ctx, app.log);
 ctx.deliverGeneration = makeDeliverer(ctx, bot, app.log);
+ctx.sendMedia = makeMediaSender(ctx, bot, app.log);
+ctx.uploadStoredMedia = makeMediaUploader(ctx, app.log);
 registerTelegramWebhook(app, bot);
 
 const reconciler = startReconcileWorker(ctx, app.log);
