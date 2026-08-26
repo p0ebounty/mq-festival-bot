@@ -32,3 +32,10 @@ storage/tmp/
 
 # claude local
 .claude/settings.local.json
+
+# playwright
+test-results/
+playwright-report/
+
+# pnpm local store
+.pnpm-store/
