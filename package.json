@@ -20,22 +20,23 @@
     "kie": "tsx scripts/kie-live.mts"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@eslint/eslintrc": "^3.3.6",
+    "@mq/config": "workspace:*",
+    "@mq/core": "workspace:*",
+    "@mq/db": "workspace:*",
     "@playwright/test": "^1.62.1",
     "@types/node": "^22.10.2",
     "dotenv": "^16.6.1",
+    "drizzle-orm": "^0.38.3",
     "eslint": "^9.17.0",
     "playwright": "^1.62.1",
+    "postgres": "^3.4.5",
     "prettier": "^3.4.2",
     "server-only": "^0.0.1",
     "tsx": "^4.23.12",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
-    "vitest": "^2.1.8",
-    "@mq/db": "workspace:*",
-    "@mq/config": "workspace:*",
-    "@mq/core": "workspace:*",
-    "drizzle-orm": "^0.38.3",
-    "postgres": "^3.4.5"
+    "vitest": "^2.1.8"
   }
 }
