@@ -139,5 +139,72 @@ if (cmd === 'routing-bench') {
   process.exit(0);
 }
 
+if (cmd === 'e2e-generation') {
+  // Полный путь фазы 4: createTask → callback от kie.ai → файл на нашем диске.
+  const { users, generations, media } = await import('@mq/db/schema');
+  const { generationsRepo } = await import('@mq/db');
+  const { eq } = await import('drizzle-orm');
+  const repo = generationsRepo(db);
+
+  const PUBLIC_URL = process.env.PUBLIC_URL!;
+  console.log(`\nПроверка сквозного пути. Callback придёт на ${PUBLIC_URL}/hooks/kie\n`);
+
+  // тестовый участник
+  const tgId = 999000001n;
+  let [user] = await db.select().from(users).where(eq(users.tgId, tgId)).limit(1);
+  if (!user) {
+    [user] = await db.insert(users).values({
+      tgId, username: 'e2e_probe', firstName: 'E2E', tokenBalance: 100,
+    }).returning();
+    console.log('создан тестовый участник');
+  }
+
+  const model = getModel('nano-banana-2')!;
+  const req = { prompt: 'A single red maple leaf on white background, minimal, studio light', aspectRatio: '1:1' as const };
+
+  const gen = await repo.create({
+    userId: user!.id, kind: 'image', model: model.id,
+    userPrompt: 'красный кленовый лист',
+    finalPrompt: req.prompt, tokensCharged: 1,
+  });
+  console.log('1) запись generations создана:', gen.id);
+
+  const payload = buildCreateTask(model, req, `${PUBLIC_URL}/hooks/kie`);
+  const taskId = await client.createTask(payload);
+  await repo.markSubmitted(gen.id, taskId, model.kieModel);
+  console.log('2) задача поставлена, taskId =', taskId);
+
+  console.log('3) ждём callback (НЕ опрашиваем — проверяем именно вебхук)...');
+  const deadline = Date.now() + 210_000;
+  let final: typeof gen | undefined;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const [row] = await db.select().from(generations).where(eq(generations.id, gen.id)).limit(1);
+    process.stdout.write(`   статус: ${row!.status}\r`);
+    if (row!.status === 'success' || row!.status === 'failed') { final = row as never; break; }
+  }
+  console.log('');
+
+  if (!final) { console.log('✗ callback не пришёл за 210 с'); process.exit(1); }
+  if (final.status !== 'success') {
+    console.log('✗ задача завершилась ошибкой:', final.failMessage); process.exit(1);
+  }
+
+  const [m] = await db.select().from(media).where(eq(media.id, final.outputMediaId!)).limit(1);
+  console.log('4) статус:', final.status, '| кредитов:', final.creditsConsumed, '| время:', final.durationMs, 'мс');
+  console.log('5) media:', m!.path, `${(m!.bytes / 1024).toFixed(0)}КБ`, m!.mimeType);
+
+  const onDisk = `${process.env.MEDIA_ROOT}/${m!.path}`;
+  const st = await fs.stat(onDisk);
+  console.log('6) файл на диске:', onDisk, `${(st.size / 1024).toFixed(0)}КБ`);
+
+  const url = `${PUBLIC_URL}/media/${m!.id}`;
+  const head = await fetch(url, { method: 'GET' });
+  console.log('7) отдаётся по HTTPS:', url, '→', head.status, head.headers.get('content-type'));
+
+  console.log(st.size === m!.bytes && head.ok ? '\n✅ сквозной путь работает' : '\n✗ расхождение');
+  process.exit(st.size === m!.bytes && head.ok ? 0 : 1);
+}
+
 console.log('неизвестная команда:', cmd);
 process.exit(2);
