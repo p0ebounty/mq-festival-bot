@@ -16,6 +16,9 @@ export const SETTINGS_SCHEMA = {
   'economy.startBalance':  { type: 'int', default: 10, min: 0, max: 1000, label: 'Стартовый баланс' },
   'economy.costPerImage':  { type: 'int', default: 1,  min: 0, max: 100,  label: 'Цена генерации' },
   'economy.socialBonus':   { type: 'int', default: 3,  min: 0, max: 100,  label: 'Бонус за репост' },
+  // Сколько раз участнику можно начислить бонус по СЛАБОМУ доказательству
+  // (только vision, без подтверждённой публичной страницы). 0 = запретить.
+  'economy.weakProofLimit':{ type: 'int', default: 1,  min: 0, max: 10,   label: 'Лимит слабых подтверждений' },
 
   // ── лимиты ──
   'limits.perHour':        { type: 'int', default: 20, min: 1, max: 500, label: 'Генераций в час' },
