@@ -75,8 +75,13 @@ describe('адаптеры под разные API', () => {
 });
 
 describe('маршрутизация', () => {
-  it('для сценариев с фото выбирает nano-banana-2 основной', () => {
-    expect(primaryModel('restyle_photo', { prompt: 'x', images: ['u'] }).id).toBe('nano-banana-2');
+  // Порядок задан замером 26.08.2026, а не предположением — см.
+  // docs/experiments/2026-08-26-routing-bench.md
+  it('профессии идут через gpt-image-2 (лучше держит лицо)', () => {
+    expect(primaryModel('restyle_photo', { prompt: 'x', images: ['u'] }).id).toBe('gpt-image-2-i2i');
+  });
+
+  it('трансформация мира идёт через nano-banana-2 (не разрушает сцену)', () => {
     expect(primaryModel('transform_world', { prompt: 'x', images: ['u'] }).id).toBe('nano-banana-2');
   });
 

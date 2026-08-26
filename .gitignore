@@ -39,3 +39,7 @@ playwright-report/
 
 # pnpm local store
 .pnpm-store/
+
+# крупные артефакты замеров моделей (результаты — в .md)
+docs/experiments/assets/
+docs/experiments/bench-raw.json
