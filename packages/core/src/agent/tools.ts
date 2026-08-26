@@ -27,6 +27,12 @@ export interface ToolContext {
    * См. .claude/rules/20-bot-agent.md
    */
   userMessage: string;
+  /**
+   * URL последнего фото участника в этом диалоге (уже в хранилище kie.ai).
+   * Нужен сценарию 1 ТЗ: фото могло прийти сообщением раньше, чем просьба
+   * «сделай меня космонавтом».
+   */
+  lastImageUrl?: string | undefined;
   /** Логгер вызывающей стороны. */
   log: { info: (o: unknown, m?: string) => void; warn: (o: unknown, m?: string) => void };
 }

@@ -1,5 +1,6 @@
 import {
-  createDb, generationsRepo, mediaRepo, conversationsRepo, usersRepo, tokensRepo, type Db,
+  createDb, generationsRepo, mediaRepo, conversationsRepo, usersRepo, tokensRepo,
+  worldsRepo, type Db,
 } from '@mq/db';
 import { SettingsService } from '@mq/config';
 import { KieClient, LocalStorage, OpenAiChatProvider, ToolRegistry, type ChatProvider } from '@mq/core';
@@ -20,12 +21,17 @@ export interface AppContext {
   conversations: ReturnType<typeof conversationsRepo>;
   users: ReturnType<typeof usersRepo>;
   tokens: ReturnType<typeof tokensRepo>;
+  worlds: ReturnType<typeof worldsRepo>;
   registry: ToolRegistry;
   /**
    * Досылка готовой генерации участнику. Ставится после создания бота —
    * иначе получился бы цикл: боту нужен контекст, контексту нужен бот.
    */
   deliverGeneration?: (generationId: string) => Promise<void>;
+  /** Отправка сохранённой картинки участнику (базовый мир). */
+  sendMedia?: (chatId: bigint, mediaId: string, caption: string) => Promise<boolean>;
+  /** Заливка нашей картинки в хранилище kie.ai — модели нужен URL. */
+  uploadStoredMedia?: (mediaId: string) => Promise<string | null>;
   /** Провайдер собирается на каждый запрос: модель меняется в админке. */
   chatProvider: () => Promise<ChatProvider>;
 }
@@ -56,6 +62,7 @@ export function createContext(): AppContext {
     conversations: conversationsRepo(db),
     users: usersRepo(db),
     tokens: tokensRepo(db),
+    worlds: worldsRepo(db),
     registry: new ToolRegistry(),
     chatProvider,
   };

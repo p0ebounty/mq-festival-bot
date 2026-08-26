@@ -128,6 +128,16 @@ export async function applyTaskResult(
 
   if (changed) {
     log.info({ generationId, bytes: stored.bytes, credits: rec.creditsConsumed }, 'генерация готова');
+
+    // Изменённый мир становится текущим: участник может менять его дальше
+    // цепочкой — шторм → роботы → акварель, каждый раз от предыдущего.
+    // Это сценарий 2 ТЗ в его живом виде, а не разовое превращение.
+    const done = await ctx.generations.byId(generationId);
+    if (done?.kind === 'world') {
+      await ctx.worlds.setCurrent(done.userId, mediaRow.id);
+      log.info({ userId: done.userId, mediaId: mediaRow.id }, 'мир участника обновлён');
+    }
+
     // Доставка вне транзакции применения: если Telegram недоступен, результат
     // всё равно сохранён и участник получит его при следующем заходе.
     void ctx.deliverGeneration?.(generationId).catch((e: unknown) =>

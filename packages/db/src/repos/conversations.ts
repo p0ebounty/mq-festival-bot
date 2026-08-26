@@ -60,6 +60,23 @@ export function conversationsRepo(db: Db) {
         .where(eq(conversations.id, conversationId));
     },
 
+    /**
+     * URL последнего фото, присланного участником в этом диалоге.
+     * Берём из contentJson уже сохранённых сообщений — отдельная колонка
+     * не нужна, данные и так пишутся.
+     */
+    async lastImageUrl(conversationId: string): Promise<string | null> {
+      const rows = await db.select({ content: messages.contentJson }).from(messages)
+        .where(and(eq(messages.conversationId, conversationId), eq(messages.role, 'user')))
+        .orderBy(desc(messages.createdAt))
+        .limit(20);
+      for (const r of rows) {
+        const urls = (r.content as { imageUrls?: unknown } | null)?.imageUrls;
+        if (Array.isArray(urls) && typeof urls[0] === 'string') return urls[0];
+      }
+      return null;
+    },
+
     /** Последние N сообщений в хронологическом порядке. */
     async history(conversationId: string, limit: number) {
       const rows = await db.select().from(messages)
@@ -107,6 +124,19 @@ export function conversationsRepo(db: Db) {
         ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
       }).returning();
       return row!;
+    },
+  };
+}
+
+export function worldsRepo(db: Db) {
+  return {
+    async setCurrent(userId: string, mediaId: string) {
+      await db.update(users).set({ currentWorldMediaId: mediaId }).where(eq(users.id, userId));
+    },
+    async getCurrent(userId: string): Promise<string | null> {
+      const [row] = await db.select({ id: users.currentWorldMediaId })
+        .from(users).where(eq(users.id, userId)).limit(1);
+      return row?.id ?? null;
     },
   };
 }

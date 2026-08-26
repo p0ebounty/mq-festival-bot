@@ -41,6 +41,12 @@ export const users = pgTable('users', {
   // Баланс токенов — целое, никаких дробей. Списание/начисление только
   // через репозиторий, атомарно, чтобы не разъехалось при гонках.
   tokenBalance: integer('token_balance').notNull().default(0),
+  /**
+   * Текущий «мир» участника для сценария 2 ТЗ. Меняется при выдаче базового
+   * мира и после каждой удачной трансформации — так участник может менять
+   * мир цепочкой: шторм → роботы → акварель, каждый раз от предыдущего.
+   */
+  currentWorldMediaId: uuid('current_world_media_id'),
   isBanned: boolean('is_banned').notNull().default(false),
   bannedReason: text('banned_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
