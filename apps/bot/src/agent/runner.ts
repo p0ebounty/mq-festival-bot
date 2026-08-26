@@ -12,6 +12,8 @@ export interface IncomingMessage {
   text: string;
   /** Публичные URL фото участника (уже загруженных в kie.ai). */
   imageUrls?: string[];
+  /** Голосовое как data-URL mp3. */
+  audioDataUrls?: string[];
   from: { username?: string | undefined; firstName?: string | undefined; lastName?: string | undefined; languageCode?: string | undefined };
 }
 
@@ -65,6 +67,7 @@ export async function handleIncoming(
     role: 'user',
     text: msg.text,
     ...(msg.imageUrls?.length ? { imageUrls: msg.imageUrls } : {}),
+    ...(msg.audioDataUrls?.length ? { audioDataUrls: msg.audioDataUrls } : {}),
   };
 
   await app.conversations.addMessage({

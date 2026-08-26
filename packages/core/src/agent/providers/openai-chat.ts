@@ -156,12 +156,14 @@ function toOai(m: AgentMessage): Record<string, unknown> {
         : {}),
     };
   }
-  // user: картинки идут блоками, если они есть
-  if (m.imageUrls?.length) {
+  // user: картинки и голос идут блоками, если они есть.
+  // Аудио тоже уходит через image_url — см. комментарий у AgentMessage.audioDataUrls.
+  const media = [...(m.imageUrls ?? []), ...(m.audioDataUrls ?? [])];
+  if (media.length) {
     return {
       role: 'user',
       content: [
-        ...m.imageUrls.map((url) => ({ type: 'image_url', image_url: { url } })),
+        ...media.map((url) => ({ type: 'image_url', image_url: { url } })),
         { type: 'text', text: m.text ?? '' },
       ],
     };

@@ -40,7 +40,7 @@ ctx.registry
   .register(makeGetBalanceTool(ctx))
   .register(makeGenerateImageTool(ctx));
 
-const bot = createBot(ctx, app.log);
+const { bot } = createBot(ctx, app.log);
 ctx.deliverGeneration = makeDeliverer(ctx, bot, app.log);
 registerTelegramWebhook(app, bot);
 
