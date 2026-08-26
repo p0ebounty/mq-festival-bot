@@ -1,3 +1,3 @@
-export * from './crypto.js';
-export * from './defaults.js';
-export * from './settings.js';
+export * from './crypto';
+export * from './defaults';
+export * from './settings';

@@ -1,25 +1,29 @@
 # Маршруты dev-стенда. Traefik работает в network_mode: host,
 # поэтому ходит в systemd-сервисы напрямую на 127.0.0.1.
 # providers.file.watch=true → правки применяются без рестарта Traefik.
+#
+# Разделение путей:
+#   бот (Fastify, :3001) — /tg (вебхук Telegram), /g (публичные страницы QR),
+#                          /media, /hooks (callback kie.ai), /healthz
+#   админка (Next.js, :3002) — всё остальное, включая /api/* (route handlers)
+#
+# ВАЖНО: rule пишем ОДНОЙ строкой. Свёрнутый скаляр YAML (>-) сохраняет перевод
+# строки, если продолжение отбито большим отступом, и Traefik такое правило
+# отвергает с "expected ')', found newline".
 http:
   routers:
-    # Специфичные пути (бот/API/публичные страницы) — высокий приоритет.
-    mqbot-dev-api:
-      rule: >-
-        Host(`bot-dev.example.com`) &&
-        (PathPrefix(`/api`) || PathPrefix(`/tg`) || PathPrefix(`/g`) || PathPrefix(`/media`))
+    mqbot-dev-bot:
+      rule: "Host(`bot-dev.example.com`) && (PathPrefix(`/tg`) || PathPrefix(`/g`) || PathPrefix(`/media`) || PathPrefix(`/hooks`) || Path(`/healthz`))"
       entryPoints: [websecure]
       service: mqbot-dev-bot
       priority: 100
       tls:
         certResolver: letsencrypt
 
-    # Всё остальное — админка (Next.js). Появится в фазе 3;
-    # до тех пор сюда же отвечает bot-сервис (см. fallback ниже).
-    mqbot-dev-root:
-      rule: Host(`bot-dev.example.com`)
+    mqbot-dev-admin:
+      rule: "Host(`bot-dev.example.com`)"
       entryPoints: [websecure]
-      service: mqbot-dev-bot
+      service: mqbot-dev-admin
       priority: 1
       tls:
         certResolver: letsencrypt

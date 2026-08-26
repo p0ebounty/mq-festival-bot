@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '@mq/db';
 import { settings } from '@mq/db/schema';
-import { decryptSecret, encryptSecret, isEncrypted } from './crypto.js';
-import { SETTINGS_SCHEMA, isSecretKey, settingKeys, type SettingKey } from './defaults.js';
+import { decryptSecret, encryptSecret, isEncrypted } from './crypto';
+import { SETTINGS_SCHEMA, isSecretKey, settingKeys, type SettingKey } from './defaults';
 
 /**
  * Резолвер настроек. Приоритет: БД → .env → значение по умолчанию.

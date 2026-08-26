@@ -1,7 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import { createMigrationClient } from './index.js';
+import { createMigrationClient } from './index';
 
 const appEnv = process.env.APP_ENV ?? 'dev';
 loadEnv({ path: new URL(`../../../.env.${appEnv}`, import.meta.url).pathname });
