@@ -18,6 +18,7 @@ export interface CreateGenerationInput {
   inputMediaIds?: string[];
   tokensCharged?: number;
   toolCallId?: string;
+  tgChatId?: bigint;
 }
 
 export function generationsRepo(db: Db) {
@@ -34,6 +35,7 @@ export function generationsRepo(db: Db) {
         ...(input.params ? { params: input.params } : {}),
         ...(input.inputMediaIds ? { inputMediaIds: input.inputMediaIds } : {}),
         ...(input.toolCallId ? { toolCallId: input.toolCallId } : {}),
+        ...(input.tgChatId !== undefined ? { tgChatId: input.tgChatId } : {}),
       }).returning();
       return row!;
     },

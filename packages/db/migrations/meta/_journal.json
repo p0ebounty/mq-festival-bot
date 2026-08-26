@@ -8,6 +8,13 @@
       "when": 1787755393569,
       "tag": "0000_cold_malice",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787761778361,
+      "tag": "0001_pale_beast",
+      "breakpoints": true
     }
   ]
 }
