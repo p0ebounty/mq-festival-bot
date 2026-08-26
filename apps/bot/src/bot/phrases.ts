@@ -62,6 +62,25 @@ export function unsupportedReply(kind: string): string {
   return UNSUPPORTED[kind] ?? UNSUPPORTED.other!;
 }
 
+/**
+ * Реплики на затянувшееся ожидание. Показываются заменой заглушки «Думаю…»,
+ * если ответ идёт дольше обычного.
+ *
+ * Нужны, потому что обычный вызов укладывается в 3–18 секунд, но бывает
+ * хвост: живой случай 26.08 — 106 секунд. Полторы минуты немой «печатает»
+ * читаются как поломка, даже когда всё в порядке.
+ */
+const STILL_THINKING = [
+  'Всё ещё думаю, задачка непростая…',
+  'Так, дай ещё чуть-чуть…',
+  'Почти, сейчас соображу…',
+  'Задумался крепко, но не пропал…',
+];
+
+export function stillThinking(step: number): string {
+  return STILL_THINKING[step % STILL_THINKING.length]!;
+}
+
 let tick = 0;
 
 function pick(list: readonly string[]): string {
