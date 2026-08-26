@@ -53,6 +53,9 @@ importers:
       '@mq/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@mq/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@mq/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -187,6 +190,16 @@ importers:
       drizzle-orm:
         specifier: ^0.38.3
         version: 0.38.4(@types/react@19.2.18)(postgres@3.4.9)(react@19.2.8)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/core:
+    dependencies:
       zod:
         specifier: ^3.24.1
         version: 3.25.76

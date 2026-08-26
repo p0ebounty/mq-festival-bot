@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   // Пакеты монорепо отдаются как TS-исходники, без пресборки.
-  transpilePackages: ['@mq/db', '@mq/config'],
+  transpilePackages: ['@mq/db', '@mq/config', '@mq/core'],
 
   // Next 16 в dev-режиме отдаёт /_next/* только доверенным origin'ам.
   // Без этого стенд за Traefik получает 403 на чанки и страница не гидрируется

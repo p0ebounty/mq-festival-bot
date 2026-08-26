@@ -9,9 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
@@ -19,11 +18,17 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 
 type SettingRow = { key: string; value: string | null; isSecret: boolean; hasValue: boolean };
 
-type Props = { initial: Record<string, SettingRow> };
+type RouteChain = {
+  task: string;
+  label: string;
+  chain: Array<{ id: string; label: string; cost: number; notes: string }>;
+};
+
+type Props = { initial: Record<string, SettingRow>; routes: RouteChain[] };
 
 type KeyCheck = { state: 'idle' | 'checking' | 'ok' | 'fail'; message?: string; credits?: number };
 
-export function SettingsView({ initial }: Props) {
+export function SettingsView({ initial, routes }: Props) {
   const [rows, setRows] = useState(initial);
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   const [check, setCheck] = useState<KeyCheck>({ state: 'idle' });
@@ -195,41 +200,64 @@ export function SettingsView({ initial }: Props) {
 
             <Card>
               <CardHeader>
-                <CardTitle>Модели</CardTitle>
-                <CardDescription>Что используется для диалога и для картинок.</CardDescription>
+                <CardTitle>Модель агента</CardTitle>
+                <CardDescription>
+                  Кто ведёт диалог и решает, какой инструмент вызвать.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <TextSetting
-                    id="chat-model" label="Модель агента" settingKey="kie.chatModel"
+                    id="chat-model" label="Модель" settingKey="kie.chatModel"
                     rows={rows} onSave={save} saving={saving}
+                    hint="claude-sonnet-5 — заметно быстрее и втрое дешевле opus-5 при той же точности на этой задаче."
                   />
-                  <TextSetting
-                    id="image-model" label="Модель генерации картинок" settingKey="kie.imageModel"
-                    rows={rows} onSave={save} saving={saving}
-                  />
-                  <Field>
-                    <FieldLabel htmlFor="resolution">Разрешение</FieldLabel>
-                    <Select
-                      value={rows['kie.imageResolution']?.value ?? '1K'}
-                      onValueChange={(v) => save('kie.imageResolution', v)}
-                    >
-                      <SelectTrigger id="resolution" className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="1K">1K — быстро</SelectItem>
-                          <SelectItem value="2K">2K</SelectItem>
-                          <SelectItem value="4K">4K — медленно</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <FieldDescription>
-                      На фестивале важна скорость — 1K обычно достаточно.
-                    </FieldDescription>
-                  </Field>
                 </FieldGroup>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Модели генерации картинок</CardTitle>
+                <CardDescription>
+                  Выбираются автоматически по типу задачи. Заданы в коде
+                  (<code className="font-mono text-xs">packages/core/src/images/router.ts</code>),
+                  поэтому здесь их не поменять — так результат остаётся предсказуемым.
+                  Первая в строке основная, остальные подхватывают при сбое или лимите.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-5">
+                  {routes.map((r) => (
+                    <div key={r.task} className="flex flex-col gap-2">
+                      <div className="text-sm font-medium">{r.label}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {r.chain.map((m, i) => (
+                          <span key={m.id} className="flex items-center gap-2">
+                            {i > 0 ? (
+                              <span className="text-muted-foreground text-xs">→</span>
+                            ) : null}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant={i === 0 ? 'default' : 'outline'} className="cursor-default">
+                                  {m.label}
+                                  <span className="ml-1.5 font-mono text-[10px] opacity-70">
+                                    ${m.cost.toFixed(3)}
+                                  </span>
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">{m.notes}</TooltipContent>
+                            </Tooltip>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <Separator />
+                  <p className="text-muted-foreground text-xs">
+                    Цена указана за одно изображение при стандартном качестве.
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </div>
