@@ -1,0 +1,34 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# runtime
+logs/
+*.log
+storage/media/
+storage/tmp/
+.cache/
+
+# os / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# claude local
+.claude/settings.local.json
