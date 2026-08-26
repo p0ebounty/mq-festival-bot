@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm --filter:*)",
+      "Bash(pnpm dlx shadcn@latest:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm build:*)",
+      "Bash(node:*)",
+      "Bash(npx tsx:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(rg:*)",
+      "Bash(jq:*)",
+      "Bash(psql:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker logs:*)",
+      "Bash(systemctl status:*)",
+      "Bash(journalctl:*)",
+      "Bash(curl -sS https://docs.kie.ai/:*)",
+      "Bash(curl -sSI https://bot-dev.example.com/:*)",
+      "Bash(curl -sS http://127.0.0.1:*)",
+      "Read(//projects/bot/**)",
+      "Read(//docker/traefik/**)"
+    ],
+    "deny": [
+      "Read(//projects/bot/.env.dev)",
+      "Read(//projects/bot/.env.prod)",
+      "Bash(git push:*)",
+      "Bash(rm -rf /*)"
+    ]
+  }
+}
