@@ -1,0 +1,38 @@
+# Маршруты dev-стенда. Traefik работает в network_mode: host,
+# поэтому ходит в systemd-сервисы напрямую на 127.0.0.1.
+# providers.file.watch=true → правки применяются без рестарта Traefik.
+http:
+  routers:
+    # Специфичные пути (бот/API/публичные страницы) — высокий приоритет.
+    mqbot-dev-api:
+      rule: >-
+        Host(`bot-dev.example.com`) &&
+        (PathPrefix(`/api`) || PathPrefix(`/tg`) || PathPrefix(`/g`) || PathPrefix(`/media`))
+      entryPoints: [websecure]
+      service: mqbot-dev-bot
+      priority: 100
+      tls:
+        certResolver: letsencrypt
+
+    # Всё остальное — админка (Next.js). Появится в фазе 3;
+    # до тех пор сюда же отвечает bot-сервис (см. fallback ниже).
+    mqbot-dev-root:
+      rule: Host(`bot-dev.example.com`)
+      entryPoints: [websecure]
+      service: mqbot-dev-bot
+      priority: 1
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    mqbot-dev-bot:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:3001
+        passHostHeader: true
+
+    mqbot-dev-admin:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:3002
+        passHostHeader: true

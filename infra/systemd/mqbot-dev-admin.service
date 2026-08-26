@@ -1,0 +1,27 @@
+[Unit]
+Description=MQ Bot — dev admin (Next.js, hot-reload)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/projects/bot/apps/admin
+Environment=APP_ENV=dev
+Environment=NODE_ENV=development
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=CI=true
+ExecStart=/projects/bot/apps/admin/node_modules/.bin/next dev -p 3002
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mqbot-dev-admin
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/projects/bot
+
+[Install]
+WantedBy=multi-user.target
