@@ -1,5 +1,18 @@
 packages:
   - "apps/*"
   - "packages/*"
+
 allowBuilds:
   esbuild: set this to true or false
+
+# pnpm 10+ не выполняет postinstall без явного разрешения.
+# esbuild нужен drizzle-kit/tsx/vite; argon2 — хеширование паролей админки.
+onlyBuiltDependencies:
+  - esbuild
+  - argon2
+  - sharp
+  - "@parcel/watcher"
+
+# pnpm гоняет "pnpm install" перед каждым run/exec и падает на предупреждении
+# об ignored builds. Эта же проверка ломала запуск под systemd (нет TTY).
+verifyDepsBeforeRun: false

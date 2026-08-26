@@ -24,7 +24,10 @@ const schema = z.object({
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
   // Fail fast and loudly: a half-configured stand is worse than no stand.
-  console.error('Invalid environment:\n', z.prettifyError(parsed.error));
+  const details = parsed.error.issues
+    .map((i) => `  ${i.path.join('.') || '(root)'}: ${i.message}`)
+    .join('\n');
+  console.error(`Invalid environment (.env.${appEnv}):\n${details}`);
   process.exit(1);
 }
 
