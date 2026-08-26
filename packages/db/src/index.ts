@@ -16,3 +16,5 @@ export function createDb(url: string, opts: { max?: number } = {}) {
 export function createMigrationClient(url: string) {
   return postgres(url, { max: 1 });
 }
+
+export * from './repos/generations';

@@ -17,7 +17,12 @@
     "fastify": "^5.2.0",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "@mq/db": "workspace:*",
+    "@mq/config": "workspace:*",
+    "@mq/core": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

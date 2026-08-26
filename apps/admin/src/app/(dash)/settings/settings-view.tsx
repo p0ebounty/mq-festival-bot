@@ -194,6 +194,18 @@ export function SettingsView({ initial, routes }: Props) {
                       <AlertDescription>{check.message}</AlertDescription>
                     </Alert>
                   ) : null}
+
+                  <Separator />
+
+                  <SecretSetting
+                    id="hmac-key"
+                    label="HMAC-ключ вебхука"
+                    settingKey="kie.webhookHmacKey"
+                    rows={rows}
+                    onSave={save}
+                    saving={saving}
+                    hint="Генерируется на kie.ai/settings. Нужен, чтобы никто не мог подделать уведомление о готовности картинки. Без него бот принимает callback только по совпадению taskId — это слабее."
+                  />
                 </FieldGroup>
               </CardContent>
             </Card>
@@ -314,6 +326,53 @@ export function SettingsView({ initial, routes }: Props) {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function SecretSetting({
+  id, label, settingKey, rows, onSave, saving, hint,
+}: {
+  id: string;
+  label: string;
+  settingKey: string;
+  rows: Record<string, SettingRow>;
+  onSave: (key: string, value: string) => Promise<boolean>;
+  saving: string | null;
+  hint?: string;
+}) {
+  const [draft, setDraft] = useState('');
+  const isSet = rows[settingKey]?.hasValue ?? false;
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>
+        <span className="flex items-center gap-2">
+          {label}
+          <Badge variant={isSet ? 'secondary' : 'outline'}>{isSet ? 'задан' : 'не задан'}</Badge>
+        </span>
+      </FieldLabel>
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={isSet ? 'введите новый, чтобы заменить' : 'вставьте ключ'}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className="font-mono"
+        />
+        <Button
+          variant="outline"
+          disabled={!draft.trim() || saving === settingKey}
+          onClick={async () => { if (await onSave(settingKey, draft.trim())) setDraft(''); }}
+        >
+          {saving === settingKey ? <Spinner data-icon="inline-start" /> : null}
+          Сохранить
+        </Button>
+      </div>
+      {hint ? <FieldDescription>{hint}</FieldDescription> : null}
+    </Field>
   );
 }
 
