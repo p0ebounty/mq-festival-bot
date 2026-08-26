@@ -21,6 +21,8 @@ export interface AgentReply {
   text: string;
   userId: string;
   conversationId: string;
+  /** Кнопки-подсказки, если агент их предложил. */
+  suggestions?: string[];
 }
 
 /**
@@ -87,6 +89,9 @@ export async function handleIncoming(
     costPerImage,
   });
 
+  // Агент может предложить кнопки через suggest_replies — собираем сюда.
+  let suggestions: string[] = [];
+
   let result;
   try {
     result = await runAgent({
@@ -101,6 +106,7 @@ export async function handleIncoming(
         chatId: msg.chatId,
         userMessage: msg.text,
         lastImageUrl,
+        suggest: (options) => { suggestions = options; },
         log: { info: (o, m) => log.info(o as object, m), warn: (o, m) => log.warn(o as object, m) },
       },
     });
@@ -142,5 +148,10 @@ export async function handleIncoming(
     log.warn({ userId: user.id, iterations: result.iterations }, 'агент упёрся в лимит итераций');
   }
 
-  return { text: result.text, userId: user.id, conversationId: conversation.id };
+  return {
+    text: result.text,
+    userId: user.id,
+    conversationId: conversation.id,
+    ...(suggestions.length ? { suggestions } : {}),
+  };
 }

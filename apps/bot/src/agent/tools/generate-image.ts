@@ -6,6 +6,7 @@ import { submitGeneration } from './submit.js';
 const input = z.object({
   prompt: z.string().min(3).max(2000),
   aspect_ratio: z.enum(['1:1', '3:4', '4:3', '9:16', '16:9']).optional(),
+  caption: z.string().max(200).optional(),
 });
 
 /**
@@ -38,6 +39,13 @@ export function makeGenerateImageTool(app: AppContext): AgentTool<z.infer<typeof
           enum: ['1:1', '3:4', '4:3', '9:16', '16:9'],
           description: 'Соотношение сторон. По умолчанию 1:1. Для пейзажа 16:9, для портрета 9:16.',
         },
+        caption: {
+          type: 'string',
+          description:
+            'Короткая живая подпись к готовой картинке — её увидит участник под фото. ' +
+            'Пиши про ЕГО идею, а не общими словами: «Твой рыжий космонавт на бабушкином диване 🚀». ' +
+            'Одна фраза, по-русски, без «ваш запрос выполнен».',
+        },
       },
       required: ['prompt'],
       additionalProperties: false,
@@ -51,6 +59,7 @@ export function makeGenerateImageTool(app: AppContext): AgentTool<z.infer<typeof
         finalPrompt: buildFreePrompt(args.prompt),
         aspectRatio: args.aspect_ratio ?? DEFAULT_ASPECT.free,
         successHint: 'Рисую то, что попросил участник.',
+        caption: args.caption,
       });
     },
   };

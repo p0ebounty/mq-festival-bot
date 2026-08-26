@@ -33,6 +33,12 @@ export interface ToolContext {
    * «сделай меня космонавтом».
    */
   lastImageUrl?: string | undefined;
+  /**
+   * Предложить участнику кнопки-подсказки под ответом. Нажатие вставляет
+   * текст как обычное сообщение, поэтому кнопки — **ускоритель, а не меню**:
+   * убери их, и бот останется полностью рабочим (ADR 0003).
+   */
+  suggest?: ((options: string[]) => void) | undefined;
   /** Логгер вызывающей стороны. */
   log: { info: (o: unknown, m?: string) => void; warn: (o: unknown, m?: string) => void };
 }

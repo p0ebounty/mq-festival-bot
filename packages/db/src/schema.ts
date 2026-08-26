@@ -143,6 +143,13 @@ export const generations = pgTable('generations', {
   // рвётся, если запись сообщения не успела закоммититься.
   tgChatId: bigint('tg_chat_id', { mode: 'bigint' }),
 
+  /**
+   * Подпись к готовой картинке — её пишет САМ агент при постановке задачи.
+   * Фиксированное «Готово!» на все случаи выглядит казённо, а участнику
+   * приятнее прочитать что-то про его собственную идею.
+   */
+  caption: text('caption'),
+
   kieTaskId: text('kie_task_id'),
   failCode: text('fail_code'),
   failMessage: text('fail_message'),
