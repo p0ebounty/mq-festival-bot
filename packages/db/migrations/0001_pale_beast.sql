@@ -1,0 +1,1 @@
+ALTER TABLE "generations" ADD COLUMN "tg_chat_id" bigint;

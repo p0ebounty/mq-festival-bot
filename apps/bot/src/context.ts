@@ -1,6 +1,8 @@
-import { createDb, generationsRepo, mediaRepo, type Db } from '@mq/db';
+import {
+  createDb, generationsRepo, mediaRepo, conversationsRepo, usersRepo, tokensRepo, type Db,
+} from '@mq/db';
 import { SettingsService } from '@mq/config';
-import { KieClient, LocalStorage } from '@mq/core';
+import { KieClient, LocalStorage, OpenAiChatProvider, ToolRegistry, type ChatProvider } from '@mq/core';
 import { env } from './env.js';
 
 /**
@@ -15,6 +17,17 @@ export interface AppContext {
   kie: KieClient;
   generations: ReturnType<typeof generationsRepo>;
   media: ReturnType<typeof mediaRepo>;
+  conversations: ReturnType<typeof conversationsRepo>;
+  users: ReturnType<typeof usersRepo>;
+  tokens: ReturnType<typeof tokensRepo>;
+  registry: ToolRegistry;
+  /**
+   * Досылка готовой генерации участнику. Ставится после создания бота —
+   * иначе получился бы цикл: боту нужен контекст, контексту нужен бот.
+   */
+  deliverGeneration?: (generationId: string) => Promise<void>;
+  /** Провайдер собирается на каждый запрос: модель меняется в админке. */
+  chatProvider: () => Promise<ChatProvider>;
 }
 
 export function createContext(): AppContext {
@@ -29,5 +42,21 @@ export function createContext(): AppContext {
     baseUrl: env.KIE_API_BASE,
   });
 
-  return { db, settings, storage, kie, generations: generationsRepo(db), media: mediaRepo(db) };
+  const chatProvider = async (): Promise<ChatProvider> =>
+    new OpenAiChatProvider({
+      getApiKey: () => settings.get('kie.apiKey'),
+      model: await settings.get('kie.chatModel'),
+      buildUrl: (m) => `${env.KIE_API_BASE}/${m}/v1/chat/completions`,
+    });
+
+  return {
+    db, settings, storage, kie,
+    generations: generationsRepo(db),
+    media: mediaRepo(db),
+    conversations: conversationsRepo(db),
+    users: usersRepo(db),
+    tokens: tokensRepo(db),
+    registry: new ToolRegistry(),
+    chatProvider,
+  };
 }

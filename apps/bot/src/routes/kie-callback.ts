@@ -86,7 +86,13 @@ export async function applyTaskResult(
 
   if (rec.state === 'fail') {
     const changed = await ctx.generations.markFailed(generationId, rec.failCode, rec.failMessage);
-    if (changed) log.warn({ generationId, fail: rec.failMessage }, 'генерация не удалась');
+    if (changed) {
+      log.warn({ generationId, fail: rec.failMessage }, 'генерация не удалась');
+      // Токены возвращаем: участник не виноват, что модель не справилась.
+      const gen = await ctx.generations.byId(generationId);
+      if (gen?.tokensCharged) await ctx.tokens.grant(gen.userId, gen.tokensCharged);
+      void ctx.deliverGeneration?.(generationId).catch(() => {});
+    }
     return 'failed';
   }
 
@@ -122,6 +128,10 @@ export async function applyTaskResult(
 
   if (changed) {
     log.info({ generationId, bytes: stored.bytes, credits: rec.creditsConsumed }, 'генерация готова');
+    // Доставка вне транзакции применения: если Telegram недоступен, результат
+    // всё равно сохранён и участник получит его при следующем заходе.
+    void ctx.deliverGeneration?.(generationId).catch((e: unknown) =>
+      log.warn({ generationId, err: String(e) }, 'доставка не удалась'));
   } else {
     // Гонка callback и воркера — нормальная ситуация, не ошибка.
     log.info({ generationId }, 'результат уже применён ранее, пропускаем');

@@ -132,6 +132,11 @@ export const generations = pgTable('generations', {
   inputMediaIds: jsonb('input_media_ids').$type<string[]>(),
   outputMediaId: uuid('output_media_id').references(() => media.id, { onDelete: 'set null' }),
 
+  // Куда доставить готовую картинку. Храним прямо здесь: путь
+  // generation → tool_call → message → conversation слишком длинный и
+  // рвётся, если запись сообщения не успела закоммититься.
+  tgChatId: bigint('tg_chat_id', { mode: 'bigint' }),
+
   kieTaskId: text('kie_task_id'),
   failCode: text('fail_code'),
   failMessage: text('fail_message'),

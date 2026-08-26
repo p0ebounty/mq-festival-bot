@@ -10,7 +10,7 @@ export const SETTINGS_SCHEMA = {
   // packages/core/src/images/router.ts в коде, детерминированно и с
   // цепочкой запасных. Разрешение — там же (Quality → 1K/2K). См. ADR 0006.
   'kie.apiKey':    { type: 'secret', default: '',                label: 'API-ключ kie.ai' },
-  'kie.chatModel': { type: 'string', default: 'claude-sonnet-5', label: 'Модель агента' },
+  'kie.chatModel': { type: 'string', default: 'gemini-3-flash', label: 'Модель агента' },
 
   // ── экономика токенов ──
   'economy.startBalance':  { type: 'int', default: 10, min: 0, max: 1000, label: 'Стартовый баланс' },
