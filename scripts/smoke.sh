@@ -16,18 +16,18 @@ no(){ printf '  \033[31m✗\033[0m %s\n' "$1"; FAIL=$((FAIL+1)); }
 echo "=== smoke: $ENVNAME ($HOST) ==="
 
 echo "[локально]"
-body=$(curl -sS --max-time 10 "http://127.0.0.1:$PORT/api/health" 2>/dev/null)
-echo "$body" | grep -q '"ok":true' && ok "127.0.0.1:$PORT/api/health" || no "127.0.0.1:$PORT/api/health ($body)"
+body=$(curl -sS --max-time 10 "http://127.0.0.1:$PORT/healthz" 2>/dev/null)
+echo "$body" | grep -q '"ok":true' && ok "127.0.0.1:$PORT/healthz" || no "127.0.0.1:$PORT/healthz ($body)"
 
 echo "[HTTPS]"
-code=$(curl -sS --max-time 20 -o /tmp/smoke.$$ -w '%{http_code}' "https://$HOST/api/health" 2>/dev/null)
-[ "$code" = "200" ] && ok "GET https://$HOST/api/health → 200" || no "GET https://$HOST/api/health → $code"
+code=$(curl -sS --max-time 20 -o /tmp/smoke.$$ -w '%{http_code}' "https://$HOST/healthz" 2>/dev/null)
+[ "$code" = "200" ] && ok "GET https://$HOST/healthz → 200" || no "GET https://$HOST/healthz → $code"
 grep -q '"ok":true' /tmp/smoke.$$ 2>/dev/null && ok "тело health валидно" || no "тело health: $(head -c 80 /tmp/smoke.$$ 2>/dev/null)"
 grep -q "\"env\":\"$ENVNAME\"" /tmp/smoke.$$ 2>/dev/null && ok "стенд отвечает как '$ENVNAME'" || no "стенд вернул не '$ENVNAME'"
 rm -f /tmp/smoke.$$
 
 echo "[TLS]"
-vr=$(curl -sS --max-time 20 -o /dev/null -w '%{ssl_verify_result}' "https://$HOST/api/health" 2>/dev/null)
+vr=$(curl -sS --max-time 20 -o /dev/null -w '%{ssl_verify_result}' "https://$HOST/healthz" 2>/dev/null)
 [ "$vr" = "0" ] && ok "сертификат валиден" || no "проверка сертификата: $vr"
 exp=$(echo | openssl s_client -connect "$HOST:443" -servername "$HOST" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
 if [ -n "$exp" ]; then
@@ -36,7 +36,7 @@ if [ -n "$exp" ]; then
 fi
 
 echo "[редирект]"
-rc=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "http://$HOST/api/health" 2>/dev/null)
+rc=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "http://$HOST/healthz" 2>/dev/null)
 [ "$rc" = "301" ] || [ "$rc" = "308" ] && ok "80 → 443 ($rc)" || no "редирект 80→443 вернул $rc"
 
 echo "[инфраструктура]"

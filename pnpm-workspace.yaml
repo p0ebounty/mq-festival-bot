@@ -2,16 +2,27 @@ packages:
   - "apps/*"
   - "packages/*"
 
-allowBuilds:
-  esbuild: set this to true or false
-
 # pnpm 10+ не выполняет postinstall без явного разрешения.
-# esbuild нужен drizzle-kit/tsx/vite; argon2 — хеширование паролей админки.
-onlyBuiltDependencies:
-  - esbuild
-  - argon2
-  - sharp
-  - "@parcel/watcher"
+# argon2 — нативный модуль для хеширования паролей админки (обязателен).
+# esbuild/unrs-resolver — тулинг сборки.
+allowBuilds:
+  argon2: true
+  esbuild: true
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - '@next/env@16.3.3'
+  - '@next/eslint-plugin-next@16.3.3'
+  - '@next/swc-darwin-arm64@16.3.3'
+  - '@next/swc-darwin-x64@16.3.3'
+  - '@next/swc-linux-arm64-gnu@16.3.3'
+  - '@next/swc-linux-arm64-musl@16.3.3'
+  - '@next/swc-linux-x64-gnu@16.3.3'
+  - '@next/swc-linux-x64-musl@16.3.3'
+  - '@next/swc-win32-arm64-msvc@16.3.3'
+  - '@next/swc-win32-x64-msvc@16.3.3'
+  - eslint-config-next@16.3.3
+  - next@16.3.3
 
 # pnpm гоняет "pnpm install" перед каждым run/exec и падает на предупреждении
 # об ignored builds. Эта же проверка ломала запуск под systemd (нет TTY).

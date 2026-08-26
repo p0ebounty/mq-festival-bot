@@ -61,3 +61,22 @@
 В `apps/admin/.eslintrc` включить `no-restricted-globals` / `no-restricted-syntax`
 на `alert`, `confirm`, `prompt` и на `<select>`/`<option>` в JSX — чтобы
 требование заказчика нельзя было нарушить случайно.
+
+## Radix, а не Base UI
+
+Проект инициализирован с `--base radix` (стиль `radix-nova`), компоненты
+импортируют `radix-ui`. Значит кастомный триггер оборачивается через **`asChild`
+с children**, а НЕ через проп `render` (это API Base UI):
+
+```tsx
+// ✅ правильно (Radix)
+<AlertDialogTrigger asChild>
+  <Button aria-label="Выйти"><LogOutIcon /></Button>
+</AlertDialogTrigger>
+
+// ❌ неправильно — триггер просто не отрендерится, ошибок в консоли не будет
+<AlertDialogTrigger render={<Button ... />} />
+```
+
+Тихий отказ: кнопка исчезает из DOM без предупреждений. Ловится тестом
+`e2e/no-native-ui.spec.ts`.
