@@ -251,3 +251,25 @@ describe('честность про неудачу инструмента', () =
     expect(payload.outcome).toBeUndefined();
   });
 });
+
+describe('таймаут провайдера', () => {
+  it('по умолчанию 180 секунд — живой случай показал 106 с при лимите 90', () => {
+    const p = new OpenAiChatProvider({ getApiKey: () => 'k', model: 'm' });
+    expect((p as unknown as { timeoutMs: number }).timeoutMs).toBe(180_000);
+  });
+
+  it('таймаут помечается повторяемым и объясняется по-человечески', async () => {
+    const f = vi.fn().mockImplementation(() => {
+      const e = new Error('timed out');
+      e.name = 'TimeoutError';
+      return Promise.reject(e);
+    });
+    const p = new OpenAiChatProvider({ getApiKey: () => 'k', model: 'm', fetchImpl: f as never });
+    await expect(p.complete({ system: 's', messages: [], tools: [] })).rejects.toMatchObject({
+      retryable: true,
+    });
+    await expect(p.complete({ system: 's', messages: [], tools: [] })).rejects.toMatchObject({
+      userMessage: expect.stringContaining('Напиши ещё раз'),
+    });
+  });
+});

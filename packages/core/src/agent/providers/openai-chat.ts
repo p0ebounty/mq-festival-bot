@@ -42,7 +42,11 @@ export class OpenAiChatProvider implements ChatProvider {
 
   constructor(private readonly opts: OpenAiChatOptions) {
     this.buildUrl = opts.buildUrl ?? ((m) => `https://api.kie.ai/${m}/v1/chat/completions`);
-    this.timeoutMs = opts.timeoutMs ?? 90_000;
+    // 180 с, а не 90. Живой случай 26.08: запрос отработал у kie.ai за
+    // 106 секунд и УСПЕШНО, но мы оборвали его на 90-й — участник получил
+    // «попробуй повторить», а кредиты списались впустую. Обычные вызовы
+    // укладываются в 3–18 с, 106 — редкий хвост, но он бывает.
+    this.timeoutMs = opts.timeoutMs ?? 180_000;
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
@@ -78,8 +82,13 @@ export class OpenAiChatProvider implements ChatProvider {
       });
     } catch (err) {
       const timeout = err instanceof Error && err.name === 'TimeoutError';
-      throw new ChatProviderError(timeout ? 'таймаут провайдера' : `сеть: ${String(err)}`, true,
-        'Долго думаю — попробуй повторить.');
+      throw new ChatProviderError(
+        timeout ? `таймаут провайдера (${this.timeoutMs} мс)` : `сеть: ${String(err)}`,
+        true,
+        timeout
+          ? 'Что-то я совсем завис на этом. Напиши ещё раз, пожалуйста — обычно отвечаю быстро.'
+          : 'Связь подвела. Повтори, пожалуйста.',
+      );
     }
 
     const raw = await res.text();

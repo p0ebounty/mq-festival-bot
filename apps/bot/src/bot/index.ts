@@ -4,7 +4,7 @@ import { UserGate } from '@mq/core';
 import type { AppContext } from '../context.js';
 import { env } from '../env.js';
 import { handleIncoming } from '../agent/runner.js';
-import { phrases, unsupportedReply } from './phrases.js';
+import { phrases, unsupportedReply, stillThinking } from './phrases.js';
 import { prepareMessage } from './format.js';
 import { ingestPhoto, ingestVoice } from './media.js';
 
@@ -30,7 +30,16 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   });
 
   bot.on('message:photo', async (c) => {
-    await accept(c, c.msg.caption ?? 'Вот моё фото.', { photo: true });
+    // Без подписи участник ещё НЕ сказал, что делать. Раньше сюда шло
+    // «Вот моё фото.» — агент читал это как согласие и сам начинал генерацию
+    // (живой случай: прислал фото молча, получил себя космонавтом).
+    await accept(
+      c,
+      c.msg.caption?.trim() ||
+        '[Участник прислал фото и пока НЕ сказал, что с ним делать. ' +
+        'Посмотри, что на снимке, и спроси, чего он хочет. Ничего не запускай сам.]',
+      { photo: true },
+    );
   });
 
   // Голосовые и кружки: перегоняем в mp3 и отдаём модели — она понимает речь
@@ -138,6 +147,11 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     // дольше (модель 6–11 с, плюс инструменты). Держим его повтором,
     // иначе участник видит тишину и думает, что бот отвалился.
     const stopTyping = keepTyping(c);
+    // Если ответ затянулся, обновляем заглушку: полторы минуты немой
+    // «печатает» читаются как поломка, даже когда всё в порядке.
+    const stopProgress = placeholderId === undefined
+      ? () => {}
+      : keepProgress(c, placeholderId);
 
     let reply;
     try {
@@ -157,6 +171,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       }, log);
     } finally {
       stopTyping();
+      stopProgress();
     }
 
     const body = reply.text.trim();
@@ -223,6 +238,22 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
  * Telegram гасит его через ~5 секунд, поэтому шлём заново каждые 4.
  * Возвращает функцию остановки — вызывать обязательно, даже при ошибке.
  */
+/**
+ * Обновляет сообщение-заглушку, пока идёт долгий ответ.
+ * Первое обновление — через 25 секунд: раньше не нужно, обычный ответ
+ * укладывается в 3–18 секунд и заглушка просто сменится настоящим текстом.
+ */
+function keepProgress(c: Context, messageId: number): () => void {
+  const chatId = c.chat?.id;
+  if (chatId === undefined) return () => {};
+  let step = 0;
+  const timer = setInterval(() => {
+    void c.api.editMessageText(chatId, messageId, stillThinking(step++)).catch(() => {});
+  }, 25_000);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 function keepTyping(c: { replyWithChatAction: (a: 'typing') => Promise<unknown> }): () => void {
   const ping = () => void c.replyWithChatAction('typing').catch(() => {});
   ping();
