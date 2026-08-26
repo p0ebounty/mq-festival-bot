@@ -39,9 +39,12 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       const buf = await app.storage.read(media.path);
       // Шлём файлом, а не ссылкой: Telegram кэширует и показывает мгновенно,
       // и картинка не зависит от доступности нашего домена.
-      await bot.api.sendPhoto(Number(gen.tgChatId), new InputFile(buf, 'mqbot.jpg'), {
-        caption: 'Готово! ✨',
-      });
+      // Подпись пишет агент при постановке задачи — она про идею участника,
+      // а не казённое «Готово!». Если агент её не дал, обходимся без подписи:
+      // пустая лучше безликой.
+      const caption = gen.caption?.trim();
+      await bot.api.sendPhoto(Number(gen.tgChatId), new InputFile(buf, 'mqbot.jpg'),
+        caption ? { caption } : {});
       log.info({ generationId, bytes: media.bytes }, 'картинка доставлена участнику');
     } catch (err) {
       log.error({ generationId, err: String(err) }, 'не удалось доставить картинку');

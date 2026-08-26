@@ -38,6 +38,7 @@ export function makeListProfessionsTool(app: AppContext): AgentTool<Record<strin
 const restyleInput = z.object({
   profession: z.string().min(2).max(64),
   extra_idea: z.string().max(600).optional(),
+  caption: z.string().max(200).optional(),
 });
 
 export function makeRestylePhotoTool(app: AppContext): AgentTool<z.infer<typeof restyleInput>> {
@@ -59,6 +60,13 @@ export function makeRestylePhotoTool(app: AppContext): AgentTool<z.infer<typeof 
         extra_idea: {
           type: 'string',
           description: 'Дополнительные пожелания участника на английском, дословно. Пусто, если их не было.',
+        },
+        caption: {
+          type: 'string',
+          description:
+            'Короткая живая подпись к готовой картинке — её увидит участник под фото. ' +
+            'Пиши про ЕГО идею, а не общими словами: «Твой рыжий космонавт на бабушкином диване». ' +
+            'Одна фраза, по-русски, без «ваш запрос выполнен».',
         },
       },
       required: ['profession'],
@@ -95,6 +103,7 @@ export function makeRestylePhotoTool(app: AppContext): AgentTool<z.infer<typeof 
         aspectRatio: DEFAULT_ASPECT.profession,
         images: [photo],
         successHint: `Делаю участника в образе «${known?.title ?? args.profession}».`,
+        caption: args.caption,
       });
     },
   };
@@ -151,7 +160,10 @@ export function makeGetBaseWorldTool(app: AppContext): AgentTool<Record<string, 
   };
 }
 
-const transformInput = z.object({ change: z.string().min(3).max(600) });
+const transformInput = z.object({
+  change: z.string().min(3).max(600),
+  caption: z.string().max(200).optional(),
+});
 
 export function makeTransformWorldTool(app: AppContext): AgentTool<z.infer<typeof transformInput>> {
   return {
@@ -172,6 +184,13 @@ export function makeTransformWorldTool(app: AppContext): AgentTool<z.infer<typeo
           description:
             'Что изменить, на английском, дословно по мысли участника. Например: ' +
             '"change the weather to a violent storm and replace the knights with robots".',
+        },
+        caption: {
+          type: 'string',
+          description:
+            'Короткая живая подпись к готовой картинке — её увидит участник под фото. ' +
+            'Пиши про ЕГО идею, а не общими словами: «Твой рыжий космонавт на бабушкином диване». ' +
+            'Одна фраза, по-русски, без «ваш запрос выполнен».',
         },
       },
       required: ['change'],
@@ -204,6 +223,7 @@ export function makeTransformWorldTool(app: AppContext): AgentTool<z.infer<typeo
         images: [url],
         inputMediaIds: [mediaId],
         successHint: 'Перестраиваю мир по просьбе участника.',
+        caption: args.caption,
       });
     },
   };

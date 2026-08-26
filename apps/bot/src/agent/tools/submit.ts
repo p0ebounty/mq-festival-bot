@@ -15,6 +15,8 @@ export interface SubmitInput {
   inputMediaIds?: string[];
   /** Что сказать агенту при успехе — он перескажет это участнику. */
   successHint: string;
+  /** Подпись к готовой картинке, написанная агентом. */
+  caption?: string | undefined;
 }
 
 /**
@@ -69,6 +71,7 @@ export async function submitGeneration(
     params: { aspectRatio: input.aspectRatio, task: input.task, chain: chain.map((m) => m.id) },
     tokensCharged: cost,
     tgChatId: ctx.chatId,
+    ...(input.caption ? { caption: input.caption } : {}),
     ...(input.inputMediaIds?.length ? { inputMediaIds: input.inputMediaIds } : {}),
   });
 

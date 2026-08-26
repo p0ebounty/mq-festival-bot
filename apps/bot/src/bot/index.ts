@@ -1,4 +1,4 @@
-import { Bot, type Context } from 'grammy';
+import { Bot, Keyboard, type Context } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
 import { UserGate } from '@mq/core';
 import type { AppContext } from '../context.js';
@@ -36,7 +36,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   // Голосовые и кружки: перегоняем в mp3 и отдаём модели — она понимает речь
   // напрямую, отдельного распознавания не нужно (у kie.ai его и нет).
   bot.on(['message:voice', 'message:video_note'], async (c) => {
-    await accept(c, '(голосовое сообщение)', { voice: true });
+    await accept(c, 'Участник прислал голосовое сообщение. Послушай запись и ответь на то, что он сказал.', { voice: true });
   });
 
   /**
@@ -165,25 +165,45 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       return;
     }
 
-    await send(c, body, placeholderId);
+    await send(c, body, placeholderId, reply.suggestions);
   }
 
   /**
    * Отправка с форматированием. Если Telegram отверг HTML — шлём простым
    * текстом: потерять оформление не страшно, потерять сообщение страшно.
    */
-  async function send(c: Ctx, raw: string, editId: number | undefined): Promise<void> {
+  async function send(
+    c: Ctx, raw: string, editId: number | undefined, suggestions?: string[],
+  ): Promise<void> {
     const { html, plain, useHtml } = prepareMessage(raw);
 
     const attempts: Array<{ text: string; html: boolean }> = useHtml
       ? [{ text: html, html: true }, { text: plain, html: false }]
       : [{ text: plain, html: false }];
 
+    // Кнопки нельзя приклеить к редактируемому сообщению обычной клавиатурой:
+    // reply-клавиатура живёт у поля ввода, а не у сообщения. Поэтому при
+    // наличии подсказок отправляем НОВОЕ сообщение, а заглушку удаляем.
+    const withKeyboard = Boolean(suggestions?.length);
+    const keyboard = withKeyboard
+      ? suggestions!.reduce((k, s) => k.text(s).row(), new Keyboard())
+          .oneTime().resized().placeholder('Или напиши своими словами…')
+      : undefined;
+
+    if (withKeyboard && editId !== undefined) {
+      await c.api.deleteMessage(c.chat!.id, editId).catch(() => {});
+      editId = undefined;
+    }
+
     for (const attempt of attempts) {
       try {
-        const opts = attempt.html ? { parse_mode: 'HTML' as const } : {};
+        const opts = {
+          ...(attempt.html ? { parse_mode: 'HTML' as const } : {}),
+          ...(keyboard ? { reply_markup: keyboard } : {}),
+        };
         if (editId !== undefined) {
-          await c.api.editMessageText(c.chat!.id, editId, attempt.text, opts);
+          await c.api.editMessageText(c.chat!.id, editId, attempt.text,
+            attempt.html ? { parse_mode: 'HTML' } : {});
         } else {
           await c.reply(attempt.text, opts);
         }

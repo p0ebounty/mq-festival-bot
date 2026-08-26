@@ -9,6 +9,8 @@ import { createBot } from './bot/index.js';
 import { makeDeliverer } from './bot/deliver.js';
 import { makeGetBalanceTool } from './agent/tools/get-balance.js';
 import { makeGenerateImageTool } from './agent/tools/generate-image.js';
+import { makeEditPhotoTool } from './agent/tools/edit-photo.js';
+import { makeSuggestTool } from './agent/tools/suggest.js';
 import {
   makeListProfessionsTool, makeRestylePhotoTool,
   makeGetBaseWorldTool, makeTransformWorldTool,
@@ -44,6 +46,8 @@ registerMediaRoutes(app, ctx);
 ctx.registry
   .register(makeGetBalanceTool(ctx))
   .register(makeGenerateImageTool(ctx))
+  .register(makeEditPhotoTool(ctx))
+  .register(makeSuggestTool())
   .register(makeListProfessionsTool(ctx))
   .register(makeRestylePhotoTool(ctx))
   .register(makeGetBaseWorldTool(ctx))
