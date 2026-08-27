@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "keyboard_shown" boolean DEFAULT false NOT NULL;
