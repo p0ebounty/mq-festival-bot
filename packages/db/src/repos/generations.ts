@@ -141,6 +141,8 @@ export function generationsRepo(db: Db) {
         mediaId: generations.outputMediaId,
         caption: generations.caption,
         userPrompt: generations.userPrompt,
+        // Нужен, чтобы отличить мир из игры от обычной правки фотографии.
+        kind: generations.kind,
         at: generations.completedAt,
       })
         .from(generations)

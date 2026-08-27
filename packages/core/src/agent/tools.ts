@@ -49,7 +49,11 @@ export interface ToolContext {
    * генерацию 22-минутной давности вместо только что присланного фото.
    * Теперь список отдаётся модели целиком, а выбор делает она (ADR 0010).
    */
-  images?: ReadonlyArray<{ id: string; url: string; origin: 'user' | 'bot'; label: string }> | undefined;
+  images?: ReadonlyArray<{
+    id: string; url: string; origin: 'user' | 'bot'; label: string;
+    /** Это мир из игры — от этого зависит, двигать ли текущий мир участника. */
+    isWorld?: boolean;
+  }> | undefined;
   /**
    * Предложить участнику кнопки-подсказки под ответом. Нажатие вставляет
    * текст как обычное сообщение, поэтому кнопки — **ускоритель, а не меню**:

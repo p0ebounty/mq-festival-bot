@@ -105,7 +105,12 @@ export function makeEditImageTool(app: AppContext): AgentTool<z.infer<typeof inp
         // модели, которая лучше держит лицо. Это не флаг для агента — он
         // про маршрутизацию вообще ничего не знает.
         task: picked.origin === 'user' ? 'restyle_photo' : 'transform_world',
-        kind: picked.origin === 'user' ? 'image' : 'world',
+        // ⚠️ kind='world' двигает текущий мир участника вперёд по цепочке,
+        // поэтому он ставится ТОЛЬКО настоящему миру из игры. Раньше здесь
+        // стояло «пришло от нас → значит мир», и правка присланного фото
+        // молча угоняла мир: живой случай 27.08, город на облаках заменился
+        // отредактированной башней.
+        kind: picked.isWorld ? 'world' : 'image',
         userPrompt: ctx.userMessage,
         finalPrompt: buildEditPrompt({ change: args.change }),
         aspectRatio: args.aspect_ratio ?? DEFAULT_ASPECT.free,

@@ -24,6 +24,15 @@ export interface DialogImage {
   url: string;
   /** Строчка для списка в контексте — по-русски, для модели. */
   label: string;
+  /**
+   * Это «мир из игры» — сценарий 2 ТЗ, а не просто картинка.
+   *
+   * Отличать обязательно: правка мира двигает `users.current_world_media_id`
+   * вперёд по цепочке, а правка обычной фотографии — нет. Живой случай
+   * 27.08: участник поправил присланное фото башни, и его город на облаках
+   * молча перестал быть его миром.
+   */
+  isWorld?: boolean;
   at: Date;
 }
 
@@ -34,6 +43,7 @@ interface Draft {
   origin: 'user' | 'bot';
   at: Date;
   label: string;
+  isWorld?: boolean;
   url?: string;
   mediaId?: string;
 }
@@ -66,6 +76,9 @@ export async function collectDialogImages(
       origin: 'bot',
       at: gen.at ?? new Date(),
       mediaId: gen.mediaId,
+      // Вся цепочка мира помечается миром, а не только последнее звено:
+      // участник вправе вернуться к раннему варианту и продолжить с него.
+      isWorld: gen.kind === 'world',
       label: idea ? `мы нарисовали: «${trim(idea, 70)}»` : 'картинка, которую мы нарисовали',
     });
   }
@@ -79,6 +92,7 @@ export async function collectDialogImages(
       // Мир мог быть выдан до этого диалога — тогда ставим его в самое начало.
       at: world.at ?? new Date(input.conversationStartedAt.getTime() - 1),
       mediaId: world.mediaId,
+      isWorld: true,
       label: 'стартовый мир участника (сценарий с превращением миров)',
     });
   }
@@ -91,8 +105,19 @@ export async function collectDialogImages(
     // Картинка без доступной ссылки в реестр не идёт: сослаться на неё
     // модель всё равно не сможет, а пустой id в списке только запутает.
     if (!url) continue;
-    if (out.some((x) => x.url === url)) continue;
-    out.push({ id: `img${out.length + 1}`, origin: d.origin, url, label: d.label, at: d.at });
+
+    // Одна и та же картинка приходит дважды: как результат генерации и как
+    // текущий мир. Второй раз в список её не добавляем, но признак мира
+    // переносим — иначе он потерялся бы вместе с дублем.
+    const seen = out.find((x) => x.url === url);
+    if (seen) {
+      if (d.isWorld) seen.isWorld = true;
+      continue;
+    }
+    out.push({
+      id: `img${out.length + 1}`, origin: d.origin, url, label: d.label, at: d.at,
+      ...(d.isWorld ? { isWorld: true } : {}),
+    });
   }
   return out;
 }
