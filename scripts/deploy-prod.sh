@@ -39,7 +39,10 @@ step "зависимости"
 ( cd "$PROD_DIR" && pnpm install --frozen-lockfile --config.confirmModulesPurge=false )
 
 step "сборка"
-( cd "$PROD_DIR/apps/bot" && ./node_modules/.bin/tsc -p tsconfig.json )
+# Бот не собираем в dist: пакеты монорепо экспортируют .ts, и собранный
+# бот падает на их импортах (см. комментарий в юните). tsc здесь — только
+# проверка типов, запуск идёт через tsx.
+( cd "$PROD_DIR/apps/bot" && ./node_modules/.bin/tsc -p tsconfig.json --noEmit )
 ( cd "$PROD_DIR/apps/admin" && APP_ENV=prod NODE_ENV=production ./node_modules/.bin/next build )
 
 step "миграции"

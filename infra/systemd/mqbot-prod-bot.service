@@ -9,9 +9,16 @@ WorkingDirectory=/srv/mqbot-prod/apps/bot
 Environment=APP_ENV=prod
 Environment=NODE_ENV=production
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# Прод запускается собранным: транспиляция на лету и слежение за файлами
-# здесь не нужны, а лишняя секунда старта на фестивале заметна.
-ExecStart=/usr/bin/node dist/index.js
+# ⚠️ Запускаем через tsx, а НЕ `node dist/index.js`.
+#
+# Пакеты монорепо экспортируют TypeScript-исходники (`main: ./src/index.ts`),
+# поэтому собранный бот при старте падает на `Cannot find module
+# packages/db/src/schema`: tsc собрал только apps/bot, а импорты
+# `@mq/core` и `@mq/db` ведут в .ts. Собирать ещё и пакеты — это менять
+# их сборку и экспорты ради одной секунды старта.
+#
+# tsx — ровно то, на чём месяцами работает dev-стенд, только без watch.
+ExecStart=/srv/mqbot-prod/apps/bot/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=2
 StandardOutput=journal
