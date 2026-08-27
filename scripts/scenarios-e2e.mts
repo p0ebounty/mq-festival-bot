@@ -14,20 +14,16 @@ const { createContext } = await import('../apps/bot/src/context.js');
 const { handleIncoming } = await import('../apps/bot/src/agent/runner.js');
 const { makeGetBalanceTool } = await import('../apps/bot/src/agent/tools/get-balance.js');
 const { makeGenerateImageTool } = await import('../apps/bot/src/agent/tools/generate-image.js');
-const {
-  makeListProfessionsTool, makeRestylePhotoTool,
-  makeGetBaseWorldTool, makeTransformWorldTool,
-} = await import('../apps/bot/src/agent/tools/scenarios.js');
+const { makeEditImageTool } = await import('../apps/bot/src/agent/tools/edit-image.js');
+const { makeGetBaseWorldTool } = await import('../apps/bot/src/agent/tools/base-world.js');
 const { users, generations, messages, toolCalls } = await import('@mq/db/schema');
 
 const app = createContext();
 app.registry
   .register(makeGetBalanceTool(app))
   .register(makeGenerateImageTool(app))
-  .register(makeListProfessionsTool(app))
-  .register(makeRestylePhotoTool(app))
-  .register(makeGetBaseWorldTool(app))
-  .register(makeTransformWorldTool(app));
+  .register(makeEditImageTool(app))
+  .register(makeGetBaseWorldTool(app));
 
 // Telegram в тесте нет — подменяем отправку, но заливку оставляем настоящей.
 const sentToUser: string[] = [];
@@ -110,6 +106,32 @@ console.log('   отправлено участнику:', sentToUser.join('; ')
 const w1 = await say('сделай там шторм и пусть рыцари станут роботами');
 console.log('   инструменты:', (await lastToolCalls(w1.conversationId)).join(' | ') || '—');
 
+// ── Сценарий владельца: два разных снимка, просьба про первый ──
+// Живой дефект 27.08: участник прислал новое фото, попросил «сделай ночь»,
+// а правка легла на картинку 22-минутной давности. Проверяем на реальном
+// пути — с реестром, собранным из БД, а не подсунутым в тесте.
+console.log('\n══════════ ВЫБОР КАРТИНКИ: два разных снимка ══════════');
+console.log('   ждём готовности картинки мира…');
+for (let i = 0; i < 40; i++) {
+  const [g] = await app.db.select().from(generations)
+    .where(eq(generations.userId, (await app.db.select().from(users).where(eq(users.tgId, TG_ID)).limit(1))[0]!.id))
+    .orderBy(desc(generations.createdAt)).limit(1);
+  if (g && (g.status === 'success' || g.status === 'failed')) { console.log(`   готово: ${g.status}`); break; }
+  await new Promise((r) => setTimeout(r, 5000));
+}
+
+const second = await app.kie.uploadBase64({
+  base64: `data:image/jpeg;base64,${(await fs.readFile('docs/experiments/assets/base-portrait.jpg')).toString('base64')}`,
+  fileName: 'e2e-second.jpg',
+});
+await say('а тут что у меня?', [second.downloadUrl]);
+const pick = await say('добавь на мой мир северное сияние');
+const picked = (await lastToolCalls(pick.conversationId)).join(' | ');
+console.log('   инструменты:', picked || '—');
+console.log(/edit_image/.test(picked)
+  ? '   ✓ выбрал правку картинки, а не генерацию с нуля'
+  : '   ✗ не вызвал edit_image');
+
 console.log('\n══════════ ЧТО ЛЕГЛО В БАЗУ ══════════');
 const [u] = await app.db.select().from(users).where(eq(users.tgId, TG_ID)).limit(1);
 console.log(`баланс: ${u!.tokenBalance} | текущий мир: ${u!.currentWorldMediaId?.slice(0, 8) ?? '∅'}`);
@@ -120,5 +142,6 @@ for (const g of gens) {
   console.log(`\n[${g.kind}] ${g.status} | модель ${g.model}`);
   console.log(`  сказал участник: "${g.userPrompt.slice(0, 95)}"`);
   console.log(`  ушло в модель:   "${String(g.finalPrompt).slice(0, 190)}"`);
+  console.log(`  исходная картинка: ${g.sourceUrl?.slice(-34) ?? '∅ (рисовали с нуля)'}`);
 }
 process.exit(0);

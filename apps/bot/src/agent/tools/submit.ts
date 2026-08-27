@@ -13,6 +13,12 @@ export interface SubmitInput {
   /** URL входных картинок (фото участника, базовый мир). */
   images?: string[];
   inputMediaIds?: string[];
+  /**
+   * Какая картинка ушла в модель. Пишется в БД, чтобы источник был виден в
+   * админке: когда бот отредактировал не тот снимок, выяснять это пришлось
+   * запросом в kie.ai — у нас он не хранился нигде.
+   */
+  sourceUrl?: string | undefined;
   /** Что сказать агенту при успехе — он перескажет это участнику. */
   successHint: string;
   /** Подпись к готовой картинке, написанная агентом. */
@@ -73,6 +79,8 @@ export async function submitGeneration(
     params: { aspectRatio: input.aspectRatio, task: input.task, chain: chain.map((m) => m.id) },
     tokensCharged: cost,
     tgChatId: ctx.chatId,
+    conversationId: ctx.conversationId,
+    ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
     ...(input.caption ? { caption: input.caption } : {}),
     ...(input.inputMediaIds?.length ? { inputMediaIds: input.inputMediaIds } : {}),
   });

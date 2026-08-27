@@ -18,6 +18,9 @@ export interface CreateGenerationInput {
   inputMediaIds?: string[];
   tokensCharged?: number;
   toolCallId?: string;
+  conversationId?: string;
+  /** Какая картинка ушла в модель — чтобы источник был виден в админке. */
+  sourceUrl?: string;
   tgChatId?: bigint;
   caption?: string;
 }
@@ -36,6 +39,8 @@ export function generationsRepo(db: Db) {
         ...(input.params ? { params: input.params } : {}),
         ...(input.inputMediaIds ? { inputMediaIds: input.inputMediaIds } : {}),
         ...(input.toolCallId ? { toolCallId: input.toolCallId } : {}),
+        ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+        ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
         ...(input.tgChatId !== undefined ? { tgChatId: input.tgChatId } : {}),
         ...(input.caption ? { caption: input.caption } : {}),
       }).returning();
@@ -124,24 +129,28 @@ export function generationsRepo(db: Db) {
     },
 
     /**
-     * Последняя удачная генерация участника — то, что он видел последним.
-     * Нужна для ЦЕПОЧКИ правок: «сделай день» → «добавь локомотив» должно
-     * применяться к дневной версии, а не откатываться к исходному фото.
+     * Всё, что мы нарисовали в этом диалоге, по порядку.
+     *
+     * Пришло на смену `lastResult(userId)`: та отдавала одну последнюю
+     * удачную генерацию **без оглядки на время**, и backend молча подставлял
+     * её вместо только что присланного фото. Теперь картинки не выбираются
+     * за модель — ей отдаётся весь список, а выбор делает она (ADR 0010).
      */
-    async lastResult(userId: string) {
-      const [row] = await db.select({
+    async resultsForConversation(conversationId: string) {
+      const rows = await db.select({
         mediaId: generations.outputMediaId,
+        caption: generations.caption,
+        userPrompt: generations.userPrompt,
         at: generations.completedAt,
       })
         .from(generations)
         .where(and(
-          eq(generations.userId, userId),
+          eq(generations.conversationId, conversationId),
           eq(generations.status, 'success'),
           sql`${generations.outputMediaId} is not null`,
         ))
-        .orderBy(desc(generations.completedAt))
-        .limit(1);
-      return row?.mediaId ? { mediaId: row.mediaId, at: row.at } : null;
+        .orderBy(generations.completedAt);
+      return rows.filter((r): r is typeof r & { mediaId: string } => r.mediaId !== null);
     },
 
     /** Сколько задач у пользователя сейчас в работе — для лимита «одна за раз». */
@@ -176,6 +185,17 @@ export function mediaRepo(db: Db) {
     async byId(id: string) {
       const [row] = await db.select().from(media).where(eq(media.id, id)).limit(1);
       return row;
+    },
+
+    /**
+     * Запоминает ссылку на копию в хранилище kie.ai.
+     * Реестр картинок прикладывает к запросу до шести штук — без кэша это
+     * были бы шесть заливок на каждое сообщение участника (ADR 0010).
+     */
+    async rememberRemoteUrl(id: string, url: string, expiresAt: Date) {
+      await db.update(media)
+        .set({ remoteUrl: url, remoteUrlExpiresAt: expiresAt })
+        .where(eq(media.id, id));
     },
   };
 }

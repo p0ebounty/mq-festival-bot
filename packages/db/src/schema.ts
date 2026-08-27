@@ -47,6 +47,8 @@ export const users = pgTable('users', {
    * мир цепочкой: шторм → роботы → акварель, каждый раз от предыдущего.
    */
   currentWorldMediaId: uuid('current_world_media_id'),
+  /** Когда выдан мир — чтобы он встал в реестр картинок на своё место. */
+  currentWorldAt: timestamp('current_world_at', { withTimezone: true }),
   /**
    * Висит ли у участника клавиатура подсказок.
    *
@@ -121,6 +123,13 @@ export const media = pgTable('media', {
   // Перцептивный хеш — для дедупликации скринов репостов.
   phash: varchar('phash', { length: 32 }),
   source: text('source').notNull(),      // 'telegram' | 'kie' | 'seed'
+  /**
+   * Кэш заливки в хранилище kie.ai: модель читает картинку по URL, а лежит
+   * она у нас. Без кэша шесть картинок в контексте означали бы шесть
+   * заливок на каждое сообщение участника (ADR 0010).
+   */
+  remoteUrl: text('remote_url'),
+  remoteUrlExpiresAt: timestamp('remote_url_expires_at', { withTimezone: true }),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
@@ -133,6 +142,11 @@ export const generations = pgTable('generations', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   toolCallId: uuid('tool_call_id').references(() => toolCalls.id, { onDelete: 'set null' }),
+  /**
+   * Диалог, в котором родилась генерация. `tool_call_id` для этого не годится:
+   * строка вызова пишется уже ПОСЛЕ цикла агента, а связь нужна во время.
+   */
+  conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'set null' }),
   kind: generationKind('kind').notNull(),
   status: generationStatus('status').notNull().default('pending'),
 
@@ -144,6 +158,12 @@ export const generations = pgTable('generations', {
   model: text('model').notNull(),
   params: jsonb('params'),                     // aspect_ratio, resolution и т.п.
   inputMediaIds: jsonb('input_media_ids').$type<string[]>(),
+  /**
+   * Какая именно картинка ушла в модель. Раньше не писалась нигде, и когда
+   * бот отредактировал не тот снимок, источник пришлось выяснять запросом
+   * в kie.ai. В админке это должно быть видно сразу.
+   */
+  sourceUrl: text('source_url'),
   outputMediaId: uuid('output_media_id').references(() => media.id, { onDelete: 'set null' }),
 
   // Куда доставить готовую картинку. Храним прямо здесь: путь

@@ -53,7 +53,22 @@ export class ResponsesApiProvider implements ChatProvider {
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
+  /**
+   * Обрыв потока лечится повтором, поэтому одна попытка здесь — мало.
+   * Повторяем ровно раз и только при обрыве: таймаут повторять нельзя
+   * (180 секунд × 2 участник не переживёт), а фатальные коды бессмысленно.
+   */
   async complete(req: ChatRequest): Promise<ChatResult> {
+    try {
+      return await this.attempt(req);
+    } catch (err) {
+      const truncated = err instanceof ChatProviderError && err.message.includes('поток оборвался');
+      if (!truncated) throw err;
+      return this.attempt(req);
+    }
+  }
+
+  private async attempt(req: ChatRequest): Promise<ChatResult> {
     const apiKey = await this.opts.getApiKey();
     if (!apiKey) {
       throw new ChatProviderError('ключ провайдера не задан', false,
@@ -96,7 +111,15 @@ export class ResponsesApiProvider implements ChatProvider {
     }
 
     const raw = await res.text();
-    const parsed = parseSse(raw);
+    const outcome = readSse(raw);
+    if (outcome.truncated) {
+      throw new ChatProviderError(
+        `поток оборвался, завершающего события не пришло (${res.status}, ${raw.length} байт)`, true);
+    }
+    if (outcome.failure) {
+      throw new ChatProviderError(`провайдер не справился: ${outcome.failure}`, true);
+    }
+    const parsed = outcome.body;
     if (!parsed) {
       throw new ChatProviderError(`не разобрал ответ (${res.status}): ${raw.slice(0, 140)}`, res.status >= 500);
     }
@@ -146,31 +169,64 @@ export class ResponsesApiProvider implements ChatProvider {
   }
 }
 
+export interface SseOutcome {
+  /** Финальное тело, если завершающее событие пришло. */
+  body: ResponsesBody | null;
+  /** Поток начался, но завершающего события не было — обрыв. */
+  truncated: boolean;
+  /** Сервер сам сообщил о неудаче (response.failed / response.incomplete). */
+  failure?: string;
+}
+
 /**
- * Собирает финальный ответ из потока SSE.
- * Эндпоинт отдаёт поток даже когда его не просили, поэтому это основной
- * путь разбора, а не запасной.
+ * Разбор потока SSE с диагнозом.
+ *
+ * Отличать обрыв от мусора приходится потому, что обрыв **лечится
+ * повтором**, а мусор нет. Живой прогон 27.08: пришло только
+ * response.created, ответа не было, и участник получил «не получилось
+ * обдумать ответ» на ровном месте.
  */
-export function parseSse(raw: string): ResponsesBody | null {
-  let final: ResponsesBody | null = null;
+export function readSse(raw: string): SseOutcome {
+  let body: ResponsesBody | null = null;
+  let started = false;
+  let failure: string | undefined;
+
   for (const line of raw.split('\n')) {
     if (!line.startsWith('data: ')) continue;
     try {
-      const j = JSON.parse(line.slice(6)) as { type?: string; response?: ResponsesBody } & ResponsesBody;
+      const j = JSON.parse(line.slice(6)) as {
+        type?: string;
+        response?: ResponsesBody & { error?: { message?: string }; incomplete_details?: { reason?: string } };
+      } & ResponsesBody;
+
+      if (j.type?.startsWith('response.')) started = true;
       if (j.type === 'response.completed' || j.response?.status === 'completed') {
-        final = j.response ?? j;
+        body = j.response ?? j;
+      }
+      if (j.type === 'response.failed' || j.type === 'response.incomplete') {
+        failure = j.response?.error?.message
+          ?? j.response?.incomplete_details?.reason
+          ?? j.type;
       }
     } catch {
       // Служебные строки потока пропускаем молча.
     }
   }
-  if (final) return final;
+
+  if (body) return { body, truncated: false };
+  if (failure) return { body: null, truncated: false, failure };
+
   // Не поток — пробуем обычный JSON (на случай смены поведения эндпоинта).
   try {
-    return JSON.parse(raw) as ResponsesBody;
+    return { body: JSON.parse(raw) as ResponsesBody, truncated: false };
   } catch {
-    return null;
+    return { body: null, truncated: started };
   }
+}
+
+/** Совместимая обёртка: только тело, без диагноза. */
+export function parseSse(raw: string): ResponsesBody | null {
+  return readSse(raw).body;
 }
 
 function toResponses(m: AgentMessage): Array<Record<string, unknown>> {
