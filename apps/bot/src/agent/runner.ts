@@ -96,8 +96,10 @@ export async function handleIncoming(
       ...(m.imageUrls ? { imageUrls: m.imageUrls } : {}),
     }));
 
-  const customPrompt = await app.settings.get('agent.systemPrompt');
-  const system = buildSystemPrompt(customPrompt || DEFAULT_SYSTEM_PROMPT, {
+  // Промпт живёт ТОЛЬКО в коде: это характер бота, а не крутилка. Правка
+  // из админки была убрана по решению владельца — менять его вслепую на
+  // живом фестивале опаснее, чем выкатить изменение.
+  const system = buildSystemPrompt(DEFAULT_SYSTEM_PROMPT, {
     firstName: user.firstName,
     tokenBalance: user.tokenBalance,
     costPerImage,

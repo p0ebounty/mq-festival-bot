@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PromptEditor } from './prompt-editor';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -103,7 +102,6 @@ export function SettingsView({ initial, routes }: Props) {
           <TabsTrigger value="economy">Экономика</TabsTrigger>
           <TabsTrigger value="limits">Лимиты</TabsTrigger>
           <TabsTrigger value="share">Шаринг</TabsTrigger>
-          <TabsTrigger value="prompt">Промпт</TabsTrigger>
         </TabsList>
 
         {/* ───────────── Провайдер ───────────── */}
@@ -342,21 +340,6 @@ export function SettingsView({ initial, routes }: Props) {
           </Card>
         </TabsContent>
 
-        {/* ───────────── Промпт ───────────── */}
-        <TabsContent value="prompt">
-          <Card>
-            <CardHeader>
-              <CardTitle>Системный промпт агента</CardTitle>
-              <CardDescription>
-                Характер бота. Применяется со следующего сообщения, рестарт не нужен.
-                Прошлая версия сохраняется автоматически — откатиться можно одним нажатием.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <PromptEditor />
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );
