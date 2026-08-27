@@ -11,7 +11,11 @@ Environment=NODE_ENV=production
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # Порт приходит из .env.prod через ADMIN_PORT — см. deploy-prod.sh.
 EnvironmentFile=/srv/mqbot-prod/.env.prod
-ExecStart=/bin/sh -c 'exec /srv/mqbot-prod/apps/admin/node_modules/.bin/next start -p "$ADMIN_PORT"'
+# ⚠️ -H 127.0.0.1 обязателен. `next start` без него слушает 0.0.0.0, и
+# админка отвечала на публичном IP по обычному HTTP, мимо Traefik и мимо
+# TLS: пароль ушёл бы открытым текстом. Фаервола на машине нет, наружу
+# должен смотреть только Traefik (правило 40-infra-deploy).
+ExecStart=/bin/sh -c 'exec /srv/mqbot-prod/apps/admin/node_modules/.bin/next start -H 127.0.0.1 -p "$ADMIN_PORT"'
 Restart=always
 RestartSec=2
 StandardOutput=journal
