@@ -1,6 +1,6 @@
 import {
   createDb, generationsRepo, mediaRepo, conversationsRepo, usersRepo, tokensRepo,
-  worldsRepo, keyboardRepo, shareRepo, type Db,
+  worldsRepo, keyboardRepo, shareRepo, socialRepo, ledgerRepo, type Db,
 } from '@mq/db';
 import { SettingsService } from '@mq/config';
 import {
@@ -28,6 +28,10 @@ export interface AppContext {
   keyboard: ReturnType<typeof keyboardRepo>;
   /** Короткие ссылки на результаты — цель QR-кода. */
   share: ReturnType<typeof shareRepo>;
+  /** Заявки на бонус за репост — журнал постфактум, не очередь (ADR 0007). */
+  social: ReturnType<typeof socialRepo>;
+  /** Чтение журнала токенов. Пишет в него tokensRepo. */
+  ledger: ReturnType<typeof ledgerRepo>;
   registry: ToolRegistry;
   /**
    * Досылка готовой генерации участнику. Ставится после создания бота —
@@ -94,6 +98,8 @@ export function createContext(): AppContext {
     worlds: worldsRepo(db),
     keyboard: keyboardRepo(db),
     share: shareRepo(db),
+    social: socialRepo(db),
+    ledger: ledgerRepo(db),
     registry: new ToolRegistry(),
     chatProvider,
   };

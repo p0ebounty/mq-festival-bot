@@ -20,4 +20,5 @@ export function createMigrationClient(url: string) {
 export * from './repos/generations';
 export * from './repos/conversations';
 export * from './repos/share';
+export * from './repos/social';
 export * from './seed-content';

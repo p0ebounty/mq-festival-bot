@@ -155,6 +155,28 @@ export function generationsRepo(db: Db) {
       return rows.filter((r): r is typeof r & { mediaId: string } => r.mediaId !== null);
     },
 
+    /**
+     * Последняя удачная генерация участника — с ней сверяется картинка в
+     * репосте. Берём по участнику, а не по диалогу: пост он мог выложить
+     * вчера, а ссылку прислать сегодня, когда диалог уже остыл.
+     */
+    async lastSuccessfulForUser(userId: string) {
+      const [row] = await db.select({
+        id: generations.id,
+        mediaId: generations.outputMediaId,
+        at: generations.completedAt,
+      })
+        .from(generations)
+        .where(and(
+          eq(generations.userId, userId),
+          eq(generations.status, 'success'),
+          sql`${generations.outputMediaId} is not null`,
+        ))
+        .orderBy(desc(generations.completedAt))
+        .limit(1);
+      return row;
+    },
+
     /** Сколько задач у пользователя сейчас в работе — для лимита «одна за раз». */
     async activeCountForUser(userId: string): Promise<number> {
       const [row] = await db.select({ n: sql<number>`count(*)::int` })
@@ -194,6 +216,11 @@ export function mediaRepo(db: Db) {
      * Реестр картинок прикладывает к запросу до шести штук — без кэша это
      * были бы шесть заливок на каждое сообщение участника (ADR 0010).
      */
+    /** Перцептивный хеш — им сверяется картинка в репосте (ADR 0007). */
+    async rememberPhash(id: string, phash: string) {
+      await db.update(media).set({ phash }).where(eq(media.id, id));
+    },
+
     async rememberRemoteUrl(id: string, url: string, expiresAt: Date) {
       await db.update(media)
         .set({ remoteUrl: url, remoteUrlExpiresAt: expiresAt })
