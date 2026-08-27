@@ -54,17 +54,28 @@ describe('запрос к проверяющему', () => {
   }
 
   const evidence = {
-    ourImageUrl: 'https://ours/pic.jpg',
+    ourImageUrls: ['https://ours/one.jpg', 'https://ours/two.jpg'],
     postImageUrls: ['https://post/a.jpg', 'https://post/b.jpg'],
     pageText: 'Смотрите что вышло',
     pageWasPublic: true,
   };
 
-  it('наша картинка идёт ПЕРВОЙ — на неё ссылается инструкция', async () => {
+  /**
+   * Участник мог выложить не последнюю картинку, а любую из своих.
+   * Поэтому проверяющему показывают несколько наших — и они обязаны идти
+   * ПЕРВЫМИ, на это опирается системная инструкция.
+   */
+  it('наши картинки идут первыми, публикация следом', async () => {
     const { provider: p, complete } = provider('{"published":true,"sameImage":true,"confidence":"high","reason":"ок"}');
     await askVerifier(p, evidence);
-    const req = complete.mock.calls[0]![0] as { messages: Array<{ imageUrls: string[] }> };
-    expect(req.messages[0]!.imageUrls[0]).toBe('https://ours/pic.jpg');
+    const req = complete.mock.calls[0]![0] as { messages: Array<{ imageUrls: string[]; text: string }> };
+    expect(req.messages[0]!.imageUrls).toEqual([
+      'https://ours/one.jpg', 'https://ours/two.jpg',
+      'https://post/a.jpg', 'https://post/b.jpg',
+    ]);
+    // Границу между группами модель должна знать из текста, а не угадывать.
+    expect(req.messages[0]!.text).toContain('Наших картинок приложено: 2');
+    expect(req.messages[0]!.text).toContain('Картинок с публикации приложено: 2');
   });
 
   it('идёт БЕЗ инструментов — он только смотрит и отвечает', async () => {

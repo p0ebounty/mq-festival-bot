@@ -13,7 +13,7 @@
 http:
   routers:
     mqbot-dev-bot:
-      rule: "Host(`bot-dev.example.com`) && (PathPrefix(`/tg`) || PathPrefix(`/g`) || PathPrefix(`/media`) || PathPrefix(`/hooks`) || Path(`/healthz`))"
+      rule: "Host(`bot-dev.example.com`) && (PathPrefix(`/tg/`) || PathPrefix(`/g/`) || PathPrefix(`/media/`) || PathPrefix(`/hooks/`) || Path(`/healthz`))"
       entryPoints: [websecure]
       service: mqbot-dev-bot
       priority: 100

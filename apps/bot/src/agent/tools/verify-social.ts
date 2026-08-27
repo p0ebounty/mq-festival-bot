@@ -82,9 +82,15 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
         };
       }
 
-      // Последняя удачная генерация участника — с ней и сверяем картинку.
-      const mine = await app.generations.lastSuccessfulForUser(ctx.userId);
-      if (!mine?.mediaId) {
+      // ⚠️ Сверяем со ВСЕМИ картинками участника, а не с последней.
+      //
+      // Он мог сделать пять штук и выложить вторую. Спрашивать «а какую
+      // именно ты выложил?» — плохой вопрос: человек не помнит своих
+      // формулировок, а бот и так способен узнать картинку сам. Скачиваем
+      // мы только то, что на публикации; сравнение хешей бесплатно.
+      const mine = await app.generations.successfulWithHashes(ctx.userId);
+      const newest = mine[0];
+      if (!newest?.mediaId) {
         return {
           ok: false,
           summary: 'У участника ещё нет готовых картинок, публиковать нечего.',
@@ -92,7 +98,8 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
           error: 'nothing_to_share',
         };
       }
-      const ourPhash = await ourHash(app, mine.mediaId);
+      // Хеш мог не посчитаться при сохранении — досчитываем на месте.
+      const ours = await withHashes(app, mine);
 
       // ── шаг 2: открываем страницу как случайный прохожий, без cookies ──
       let page = link.openable
@@ -135,23 +142,36 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
       checks.hashtags = page.text ? hasAnyHashtag(page.text, hashtags) : false;
 
       // ── шаг 3: сверка перцептивного хеша — сильное доказательство ──
-      if (page.public && ourPhash) {
+      // Заодно это и ответ на вопрос «какую именно генерацию проверяем»:
+      // совпавший хеш прямо указывает, какая картинка выложена.
+      let matched: { id: string } | null = null;
+      if (page.public && ours.length) {
         for (const imgUrl of page.imageUrls.slice(0, 6)) {
           const buf = await downloadImage(imgUrl);
           if (!buf) continue;
           const theirs = await perceptualHash(buf).catch(() => null);
-          if (theirs && looksSame(ourPhash, theirs)) {
-            checks.imageMatch = true;
-            break;
-          }
+          if (!theirs) continue;
+          const hit = ours.find((g) => looksSame(g.phash, theirs));
+          if (hit) { matched = hit; checks.imageMatch = true; break; }
         }
       }
 
-      if (checks.imageMatch) {
+      if (matched) {
+        // Один бонус на одну картинку: иначе один и тот же кадр можно
+        // разложить по трём площадкам и получить тройную оплату.
+        const already = await app.social.approvedForGeneration(ctx.userId, matched.id);
+        if (already) {
+          return {
+            ok: false,
+            summary: 'За эту картинку бонус уже начислен.',
+            note: 'Скажи, что бонус даётся один раз на картинку, и предложи выложить другую.',
+            error: 'generation_already_rewarded',
+          };
+        }
         return approve(app, ctx, {
           checks, evidence: 'phash', bonus, url: link.url, key,
-          generationId: mine.id,
-          reason: 'Пост открылся без входа, картинка на странице совпала с нашей.',
+          generationId: matched.id,
+          reason: 'Пост открылся без входа, картинка на странице совпала с твоей.',
         });
       }
 
@@ -166,7 +186,7 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
       const evidence: ClaimEvidence = page.public ? 'vision+page' : 'vision+screenshot';
       const used = await app.social.weakApprovalCount(ctx.userId);
       const fail = (why: string) => reject(app, ctx, checks, why,
-        { platform: link.platform, url: link.url, key, generationId: mine.id, evidence });
+        { platform: link.platform, url: link.url, key, generationId: newest.id, evidence });
 
       // Лимит проверяем ДО вызова модели: нет смысла тратить запрос,
       // если начислить всё равно нельзя.
@@ -176,8 +196,12 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
           : 'нашей картинки на публикации не нашлось, а бонус без точного совпадения уже выдавался');
       }
 
-      const ourUrl = await app.uploadStoredMedia?.(mine.mediaId);
-      if (!ourUrl) return fail('не удалось сверить публикацию с твоей картинкой');
+      // Проверяющему показываем несколько последних картинок: какая именно
+      // выложена, он определит сам — как определил бы человек.
+      const ourUrls = (await Promise.all(
+        mine.slice(0, 3).map((g) => app.uploadStoredMedia?.(g.mediaId!)),
+      )).filter((u): u is string => Boolean(u));
+      if (ourUrls.length === 0) return fail('не удалось сверить публикацию с твоими картинками');
 
       // Скриншот идёт в дело, только если картинок со страницы нет: он
       // тяжелее и хуже читается, чем сама картинка поста.
@@ -193,7 +217,7 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
       let verdict;
       try {
         verdict = await askVerifier(await app.chatProvider(), {
-          ourImageUrl: ourUrl,
+          ourImageUrls: ourUrls,
           postImageUrls: postImages,
           pageText: page.text,
           pageWasPublic: page.public,
@@ -214,7 +238,7 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
       }
 
       return approve(app, ctx, {
-        checks, evidence, bonus, url: link.url, key, generationId: mine.id,
+        checks, evidence, bonus, url: link.url, key, generationId: newest.id,
         reason: `Публикация подтверждена: ${verdict.reason}`,
       });
     },
@@ -296,17 +320,28 @@ async function reject(
   };
 }
 
-/** pHash нашей генерации. Считаем на лету, если при сохранении не посчитали. */
-async function ourHash(app: AppContext, mediaId: string): Promise<string | null> {
-  const row = await app.media.byId(mediaId);
-  if (!row) return null;
-  if (row.phash) return row.phash;
-  try {
-    const buf = await app.storage.read(row.path);
-    const hash = await perceptualHash(buf);
-    await app.media.rememberPhash(mediaId, hash);
-    return hash;
-  } catch {
-    return null;
+/**
+ * Хеши всех картинок участника. Досчитываем те, что сохранялись до фазы 8
+ * или у которых хеширование не прошло, — иначе старые генерации нельзя
+ * будет узнать на публикации.
+ */
+async function withHashes(
+  app: AppContext,
+  rows: Array<{ id: string; mediaId: string | null; phash: string | null }>,
+): Promise<Array<{ id: string; phash: string }>> {
+  const out: Array<{ id: string; phash: string }> = [];
+  for (const r of rows) {
+    if (r.phash) { out.push({ id: r.id, phash: r.phash }); continue; }
+    if (!r.mediaId) continue;
+    const media = await app.media.byId(r.mediaId);
+    if (!media) continue;
+    try {
+      const hash = await perceptualHash(await app.storage.read(media.path));
+      await app.media.rememberPhash(r.mediaId, hash);
+      out.push({ id: r.id, phash: hash });
+    } catch {
+      // Файла нет или он битый — картинку просто не сможем узнать.
+    }
   }
+  return out;
 }
