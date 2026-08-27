@@ -1,5 +1,6 @@
 import { chromium, type Browser } from 'playwright-core';
 import { env } from '../env.js';
+import { isPublicUrl } from './net-guard.js';
 
 export interface FetchedPage {
   /** Отрисовалась ли страница без стены логина. */
@@ -75,6 +76,11 @@ export async function closeBrowser(): Promise<void> {
  * черновик или запись «для друзей» так не откроется.
  */
 export async function fetchPublicPage(url: string, timeoutMs = 20_000): Promise<FetchedPage> {
+  // Ссылку прислал участник, а откроется она у нас на сервере — см.
+  // net-guard.ts. Проверяем ДО запуска браузера.
+  if (!(await isPublicUrl(url))) {
+    return { public: false, text: '', imageUrls: [], error: 'адрес ведёт не в интернет' };
+  }
   let ctx;
   try {
     const b = await browser();
@@ -89,6 +95,12 @@ export async function fetchPublicPage(url: string, timeoutMs = 20_000): Promise<
     });
     const page = await ctx.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+
+    // Публичный хост вправе увести редиректом на внутренний — проверяем,
+    // где мы в итоге оказались, а не куда собирались.
+    if (!(await isPublicUrl(page.url()))) {
+      return { public: false, text: '', imageUrls: [], error: 'ссылка увела не в интернет' };
+    }
     // Дать площадке дорисовать пост, но не ждать вечно: у соцсетей всегда
     // что-то догружается, и networkidle там не наступает никогда.
     await page.waitForTimeout(1500);
@@ -126,14 +138,29 @@ export async function fetchPublicPage(url: string, timeoutMs = 20_000): Promise<
  */
 export async function fetchOpenGraph(url: string, timeoutMs = 10_000): Promise<FetchedPage> {
   try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-        'Accept-Language': 'ru,en;q=0.8',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    // ⚠️ redirect: 'manual', а не 'follow'. С открытым списком площадок
+    // цепочку редиректов задаёт участник, и `follow` увёл бы нас внутрь
+    // сервера молча. Каждый шаг проверяем заново (net-guard.ts).
+    let current = url;
+    let res: Response | null = null;
+    for (let hop = 0; hop < 4; hop++) {
+      if (!(await isPublicUrl(current))) {
+        return { public: false, text: '', imageUrls: [], error: 'адрес ведёт не в интернет' };
+      }
+      res = await fetch(current, {
+        headers: {
+          'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+          'Accept-Language': 'ru,en;q=0.8',
+        },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const to = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+      if (!to) break;
+      current = new URL(to, current).toString();
+      res = null;
+    }
+    if (!res) return { public: false, text: '', imageUrls: [], error: 'слишком много перенаправлений' };
     if (!res.ok) return { public: false, text: '', imageUrls: [], error: `HTTP ${res.status}` };
 
     // ⚠️ НЕ res.text(): он всегда считает тело UTF-8. VK отдаёт стену в
@@ -169,6 +196,9 @@ export async function fetchOpenGraph(url: string, timeoutMs = 10_000): Promise<F
 /** Скачивание картинки со страницы для сверки хеша. */
 export async function downloadImage(url: string, maxBytes = 12 * 1024 * 1024): Promise<Buffer | null> {
   try {
+    // Адреса картинок берутся с чужой страницы — то есть их тоже задаёт
+    // тот, кто прислал ссылку.
+    if (!(await isPublicUrl(url))) return null;
     const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return null;
     const type = res.headers.get('content-type') ?? '';
