@@ -6,7 +6,7 @@ import { env } from '../env.js';
 import { handleIncoming } from '../agent/runner.js';
 import { phrases, unsupportedReply, stillThinking } from './phrases.js';
 import { prepareMessage } from './format.js';
-import { ingestPhoto, ingestVoice } from './media.js';
+import { ingestPhoto } from './media.js';
 
 /**
  * Бот — ОДИН диалог, а не меню (ADR 0003).
@@ -43,20 +43,20 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     );
   });
 
-  // Голосовые и кружки: перегоняем в mp3 и отдаём модели — она понимает речь
-  // напрямую, отдельного распознавания не нужно (у kie.ai его и нет).
-  bot.on(['message:voice', 'message:video_note'], async (c) => {
-    await accept(c, 'Участник прислал голосовое сообщение. Послушай запись и ответь на то, что он сказал.', { voice: true });
-  });
-
   /**
-   * Всё остальное. Без этого обработчика бот на видео или стикер просто
-   * молчал бы, и участник решил бы, что он сломался.
+   * Всё остальное, включая голосовые. Без этого обработчика бот на видео или
+   * стикер просто молчал бы, и участник решил бы, что он сломался.
+   *
+   * Голосовые сюда попадают намеренно: речь понимал только Gemini, и то через
+   * недокументированный трюк с блоком image_url. У моделей OpenAI, на которых
+   * мы работаем, этот путь отвечает HTTP 400 — участник получал «не получилось
+   * обдумать ответ» вместо ответа. Поддержку убрали, см. ADR 0009.
    */
   bot.on('message', async (c) => {
     const m = c.msg;
     const kind =
-      m.video ? 'video' : m.document ? 'document' : m.sticker ? 'sticker'
+      m.voice ? 'voice' : m.video_note ? 'video_note'
+      : m.video ? 'video' : m.document ? 'document' : m.sticker ? 'sticker'
       : m.audio ? 'audio' : m.animation ? 'animation' : m.location ? 'location'
       : m.contact ? 'contact' : m.poll ? 'poll' : 'other';
     log.info({ tgId: c.from?.id, kind }, 'неподдерживаемый тип сообщения');
@@ -78,7 +78,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
    * человек часто дописывает мысль вторым сообщением, и потерять его хуже,
    * чем ответить на секунду позже.
    */
-  async function accept(c: Ctx, text: string, media: { photo?: boolean; voice?: boolean } = {}): Promise<void> {
+  async function accept(c: Ctx, text: string, media: { photo?: boolean } = {}): Promise<void> {
     const from = c.from;
     if (!from) return;
     const key = String(from.id);
@@ -105,11 +105,10 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   }
 
   /** Одна единица работы: заглушка → агент → замена заглушки ответом. */
-  async function work(c: Ctx, text: string, media: { photo?: boolean; voice?: boolean }): Promise<void> {
+  async function work(c: Ctx, text: string, media: { photo?: boolean }): Promise<void> {
     const from = c.from!;
 
     const imageUrls: string[] = [];
-    const audioDataUrls: string[] = [];
 
     if (media.photo) {
       try {
@@ -117,19 +116,6 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       } catch (err) {
         log.warn({ err: String(err) }, 'не удалось забрать фото участника');
         await c.reply('Фото не получилось загрузить. Пришли ещё раз, пожалуйста.',
-          { reply_markup: { remove_keyboard: true } }).catch(() => {});
-        return;
-      }
-    }
-
-    if (media.voice) {
-      const fileId = c.msg?.voice?.file_id ?? c.msg?.video_note?.file_id;
-      try {
-        if (!fileId) throw new Error('в сообщении нет голосового');
-        audioDataUrls.push(await ingestVoice(c.api, fileId, log));
-      } catch (err) {
-        log.warn({ err: String(err) }, 'не удалось обработать голосовое');
-        await c.reply('Голосовое не получилось разобрать. Напиши текстом, пожалуйста.',
           { reply_markup: { remove_keyboard: true } }).catch(() => {});
         return;
       }
@@ -168,7 +154,6 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
         tgMessageId: BigInt(c.msg?.message_id ?? 0),
         text,
         ...(imageUrls.length ? { imageUrls } : {}),
-        ...(audioDataUrls.length ? { audioDataUrls } : {}),
         from: {
           username: from.username,
           firstName: from.first_name,

@@ -1,0 +1,16 @@
+{
+  "update_id": 900101,
+  "message": {
+    "message_id": 9101,
+    "date": 1787000000,
+    "chat": { "id": 999000777, "type": "private", "first_name": "Проверка" },
+    "from": { "id": 999000777, "is_bot": false, "first_name": "Проверка", "language_code": "ru" },
+    "voice": {
+      "duration": 4,
+      "mime_type": "audio/ogg",
+      "file_id": "AwACAgIAAxkBAAIB_fake_voice_file_id",
+      "file_unique_id": "AgADfake01",
+      "file_size": 15234
+    }
+  }
+}

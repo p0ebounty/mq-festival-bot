@@ -17,15 +17,6 @@ export interface AgentMessage {
   toolCallId?: string;
   /** URL картинок для vision (фото участника, скриншот репоста). */
   imageUrls?: string[];
-  /**
-   * Голосовые как data-URL (`data:audio/mpeg;base64,…`).
-   *
-   * ⚠️ Проверено опытом, в документации kie.ai этого нет: аудио понимается,
-   * только если положить его в блок `image_url`. Отдельный `input_audio`
-   * работает у flash, но не у pro; ссылка на файл не работает нигде.
-   * Формат — mp3: opus/ogg модель не берёт.
-   */
-  audioDataUrls?: string[];
 }
 
 /** Описание инструмента для модели. */
