@@ -10,7 +10,8 @@ Environment=APP_ENV=dev
 Environment=NODE_ENV=development
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=CI=true
-ExecStart=/projects/bot/apps/admin/node_modules/.bin/next dev -p 3002
+# -H 127.0.0.1: наружу смотрит только Traefik (см. прод-юнит).
+ExecStart=/projects/bot/apps/admin/node_modules/.bin/next dev -H 127.0.0.1 -p 3002
 Restart=always
 RestartSec=2
 StandardOutput=journal
