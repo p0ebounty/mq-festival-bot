@@ -7,7 +7,7 @@ import { handleIncoming } from '../agent/runner.js';
 import { phrases, unsupportedReply, stillThinking } from './phrases.js';
 import { prepareMessage } from './format.js';
 import { ingestPhoto } from './media.js';
-import { startGreeting, greetingText, START_CHIPS } from './greeting.js';
+import { cmdStart, cmdHelp, cmdBalance, greetingText, START_CHIPS, type CommandInput, type CommandReply } from './commands.js';
 
 /**
  * Что уходит агенту вместо подписи, когда фото прислали молча.
@@ -37,29 +37,35 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   sweeper.unref?.();
 
   /**
-   * /start отвечает СРАЗУ и без модели — см. `greeting.ts`, там же почему.
-   * Если БД недоступна, всё равно здороваемся: молчание на первом касании
-   * хуже, чем приветствие без имени и баланса.
+   * Команды меню отвечают СРАЗУ и без модели — см. `commands.ts`, там же почему.
+   * Если БД недоступна, на /start всё равно здороваемся: молчание на первом
+   * касании хуже, чем приветствие без имени и баланса.
    */
-  bot.command('start', async (c) => {
-    const from = c.from;
-    if (!from) return;
-    try {
-      const g = await startGreeting(app, {
-        tgId: BigInt(from.id),
-        chatId: BigInt(c.chat.id),
-        tgMessageId: BigInt(c.msg.message_id),
-        from: {
-          username: from.username, firstName: from.first_name,
-          lastName: from.last_name, languageCode: from.language_code,
-        },
-      }, log);
-      await send(c, g.text, undefined, g.suggestions, g.keyboardWasShown);
-    } catch (err) {
-      log.error({ err: String(err), tgId: from.id }, 'приветствие не собралось');
-      await send(c, greetingText(from.first_name, null), undefined, [...START_CHIPS], false);
-    }
-  });
+  const command = (name: string, run: (i: CommandInput) => Promise<CommandReply>) => {
+    bot.command(name, async (c) => {
+      const from = c.from;
+      if (!from) return;
+      try {
+        const r = await run({
+          tgId: BigInt(from.id),
+          chatId: BigInt(c.chat.id),
+          tgMessageId: BigInt(c.msg.message_id),
+          from: {
+            username: from.username, firstName: from.first_name,
+            lastName: from.last_name, languageCode: from.language_code,
+          },
+        });
+        await send(c, r.text, undefined, r.suggestions, r.keyboardWasShown);
+      } catch (err) {
+        log.error({ err: String(err), tgId: from.id, command: name }, 'команда не собралась');
+        await send(c, greetingText(from.first_name, null), undefined, [...START_CHIPS], false);
+      }
+    });
+  };
+
+  command('start', (i) => cmdStart(app, i, log));
+  command('help', (i) => cmdHelp(app, i, log));
+  command('balance', (i) => cmdBalance(app, i, log));
 
   bot.on('message:text', async (c) => {
     await accept(c, c.msg.text);

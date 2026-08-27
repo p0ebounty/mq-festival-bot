@@ -22,7 +22,7 @@ process.env.APP_ENV ??= 'dev';
 
 const { createContext } = await import('../apps/bot/src/context.js');
 const { handleIncoming } = await import('../apps/bot/src/agent/runner.js');
-const { startGreeting } = await import('../apps/bot/src/bot/greeting.js');
+const { cmdStart } = await import('../apps/bot/src/bot/commands.js');
 const { PHOTO_WITHOUT_CAPTION } = await import('../apps/bot/src/bot/index.js');
 const { makeGetBalanceTool } = await import('../apps/bot/src/agent/tools/get-balance.js');
 const { makeGenerateImageTool } = await import('../apps/bot/src/agent/tools/generate-image.js');
@@ -91,7 +91,7 @@ if (old) await app.db.delete(users).where(eq(users.id, old.id));
 // ── 1. /start ───────────────────────────────────────────────────────
 console.log('══════════ 1. /start должен здороваться ══════════');
 const t0 = Date.now();
-const g = await startGreeting(app, {
+const g = await cmdStart(app, {
   tgId: TG_ID, chatId: CHAT, tgMessageId: mid++,
   from: { firstName: 'Артём', username: 'e2e_first' },
 }, log);
@@ -100,6 +100,25 @@ console.log(`🤖 ${g.text}\n   кнопки: ${g.suggestions.join(' | ')}   (${
 check(/^Привет, Артём!/.test(g.text), 'поздоровался и назвал по имени');
 check(g.text.includes('готовый мир'), 'сразу сказал про готовые миры');
 check(startMs < 1000, 'ответил мгновенно, без похода в модель', `${startMs} мс`);
+
+// ── 1б. /help и /balance — тоже заготовки ───────────────────────────
+const { cmdHelp, cmdBalance } = await import('../apps/bot/src/bot/commands.js');
+const cmdInput = {
+  tgId: TG_ID, chatId: CHAT, tgMessageId: mid++,
+  from: { firstName: 'Артём', username: 'e2e_first' },
+};
+const th = Date.now();
+const help = await cmdHelp(app, cmdInput, log);
+const helpMs = Date.now() - th;
+const tb = Date.now();
+const bal = await cmdBalance(app, { ...cmdInput, tgMessageId: mid++ }, log);
+const balMs = Date.now() - tb;
+console.log(`\n🤖 /help: ${help.text.split('\n')[0]}   (${helpMs} мс)`);
+console.log(`🤖 /balance: ${bal.text.split('\n')[0]}   (${balMs} мс)`);
+check(helpMs < 1000 && balMs < 1000, '/help и /balance отвечают без модели', `${helpMs}/${balMs} мс`);
+check(bal.text.includes('10 картинок'), '/balance считает баланс в картинках');
+check(help.suggestions.length === 0 && bal.suggestions.length === 0,
+  'команды-справки кнопок не вешают');
 
 // ── 2. «какие есть готовые» ─────────────────────────────────────────
 console.log('\n══════════ 2. готовые миры выдаются, а не описываются ══════════');

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { greetingText, plural, START_CHIPS } from '../src/bot/greeting.js';
+import { greetingText, helpText, balanceText, plural, START_CHIPS } from '../src/bot/commands.js';
 
 describe('приветствие на /start', () => {
   it('здоровается — именно с этого начиналась жалоба с прода', () => {
@@ -50,5 +50,60 @@ describe('склонение после числа', () => {
     [0, 'картинок'],
   ])('%i → %s', (n, want) => {
     expect(plural(n, 'картинку', 'картинки', 'картинок')).toBe(want);
+  });
+});
+
+/**
+ * /help и /balance тоже отвечают заготовкой: ответ на них известен заранее,
+ * и гонять ради него модель — это девять секунд ожидания и деньги за токены.
+ */
+describe('/help', () => {
+  it('называет все четыре возможности, а не «создаю картинки»', () => {
+    const t = helpText(1, 3);
+    expect(t).toContain('увидеть себя в профессии');
+    expect(t).toContain('взять готовый мир');
+    expect(t).toContain('с нуля');
+    expect(t).toContain('поправить любую картинку');
+  });
+
+  it('говорит, что мир бесплатный — иначе за него боятся платить', () => {
+    expect(helpText(1, 3)).toContain('бесплатно');
+  });
+
+  it('склоняет цену и бонус', () => {
+    expect(helpText(1, 3)).toContain('стоит 1 токен.');
+    expect(helpText(2, 5)).toContain('стоит 2 токена.');
+    expect(helpText(5, 21)).toContain('ещё 21 токен.');
+  });
+
+  it('зовёт словами, а не кнопками — бот не меню', () => {
+    expect(helpText(1, 3)).toContain('Говори обычным языком');
+  });
+});
+
+describe('/balance', () => {
+  it('переводит токены в картинки', () => {
+    expect(balanceText(10, 1, 3)).toContain('это ещё 10 картинок');
+    expect(balanceText(6, 3, 3)).toContain('это ещё 2 картинки');
+    expect(balanceText(3, 3, 3)).toContain('это ещё 1 картинка');
+  });
+
+  it('на нуле не молчит про выход, а зовёт за бонусом', () => {
+    const t = balanceText(0, 1, 3);
+    expect(t).toContain('Токены кончились');
+    expect(t).toContain('ссылку на пост');
+    expect(t).not.toContain('это ещё');
+  });
+
+  it('объясняет, за что НЕ списывают — про это и спрашивают', () => {
+    const t = balanceText(10, 1, 3);
+    expect(t).toContain('Готовый мир бесплатный');
+    expect(t).toContain('возвращается');
+  });
+
+  it('перечисляет сети, куда можно публиковать', () => {
+    for (const net of ['Telegram', 'VK', 'Одноклассники', 'X', 'Instagram']) {
+      expect(balanceText(10, 1, 3), net).toContain(net);
+    }
   });
 });
