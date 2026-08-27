@@ -17,16 +17,6 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
   const gate = new UserGate();
 
-  /**
-   * Где сейчас висит клавиатура подсказок.
-   *
-   * Клавиатура в Telegram глобальная для чата и остаётся, пока её явно не
-   * убрали: `one_time_keyboard` только сворачивает её, но не удаляет.
-   * Живой случай: участник видел устаревшие подсказки под всеми следующими
-   * сообщениями. Поэтому помним, где она стоит, и снимаем при первом же
-   * ответе без подсказок.
-   */
-  const keyboardShown = new Set<number>();
 
   // Раз в 10 минут подчищаем счётчики, чтобы карта не росла всю смену.
   const sweeper = setInterval(() => gate.sweep(), 10 * 60_000);
@@ -70,7 +60,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       : m.audio ? 'audio' : m.animation ? 'animation' : m.location ? 'location'
       : m.contact ? 'contact' : m.poll ? 'poll' : 'other';
     log.info({ tgId: c.from?.id, kind }, 'неподдерживаемый тип сообщения');
-    await c.reply(unsupportedReply(kind)).catch(() => {});
+    await c.reply(unsupportedReply(kind), { reply_markup: { remove_keyboard: true } }).catch(() => {});
   });
 
   bot.catch((err) => {
@@ -104,13 +94,13 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
         : placement.reason === 'overloaded' ? phrases.overloaded()
         : phrases.queueFull();
       log.info({ tgId: from.id, reason: placement.reason }, 'сообщение отклонено заслоном');
-      await c.reply(msg).catch(() => {});
+      await c.reply(msg, { reply_markup: { remove_keyboard: true } }).catch(() => {});
       return;
     }
 
     if (placement.status === 'queued') {
       // Честно говорим, что приняли и вернёмся — но работать будем по порядку.
-      await c.reply(phrases.queued()).catch(() => {});
+      await c.reply(phrases.queued(), { reply_markup: { remove_keyboard: true } }).catch(() => {});
     }
   }
 
@@ -126,7 +116,8 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
         imageUrls.push(await ingestPhoto(app, c.api, c.msg?.photo ?? [], log));
       } catch (err) {
         log.warn({ err: String(err) }, 'не удалось забрать фото участника');
-        await c.reply('Фото не получилось загрузить. Пришли ещё раз, пожалуйста.').catch(() => {});
+        await c.reply('Фото не получилось загрузить. Пришли ещё раз, пожалуйста.',
+          { reply_markup: { remove_keyboard: true } }).catch(() => {});
         return;
       }
     }
@@ -138,7 +129,8 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
         audioDataUrls.push(await ingestVoice(c.api, fileId, log));
       } catch (err) {
         log.warn({ err: String(err) }, 'не удалось обработать голосовое');
-        await c.reply('Голосовое не получилось разобрать. Напиши текстом, пожалуйста.').catch(() => {});
+        await c.reply('Голосовое не получилось разобрать. Напиши текстом, пожалуйста.',
+          { reply_markup: { remove_keyboard: true } }).catch(() => {});
         return;
       }
     }
@@ -148,7 +140,14 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     // в чате не остаётся мусора вроде «Думаю…».
     let placeholderId: number | undefined;
     try {
-      const sent = await c.reply(phrases.thinking());
+      // К заглушке цепляем снятие клавиатуры. Это единственное НОВОЕ
+      // сообщение в обороте, а reply-клавиатуру можно менять только при
+      // отправке — к отредактированному сообщению её не прицепить.
+      //
+      // Шлём безусловно, не пытаясь помнить, висит ли она: клавиатура живёт
+      // на клиенте, а память процесса умирает при каждом перезапуске.
+      // Именно на этом сломалась прошлая версия — подсказки висели вечно.
+      const sent = await c.reply(phrases.thinking(), { reply_markup: { remove_keyboard: true } });
       placeholderId = sent.message_id;
     } catch {
       // Не смогли — не беда, просто ответим обычным сообщением.
@@ -209,25 +208,22 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
 
     const chatId = c.chat!.id;
     const withKeyboard = Boolean(suggestions?.length);
-    // Снимать клавиатуру нужно, только если она действительно висит:
-    // лишний remove_keyboard на каждое сообщение — пустая работа.
-    const mustRemove = !withKeyboard && keyboardShown.has(chatId);
 
-    const markup = withKeyboard
-      ? suggestions!.reduce((k, s) => k.text(s).row(), new Keyboard())
-          .oneTime().resized().placeholder('Или напиши своими словами…')
-      : mustRemove
-        ? { remove_keyboard: true as const }
-        : undefined;
-
-    // Клавиатуру нельзя приклеить к отредактированному сообщению — она живёт
-    // у поля ввода. Поэтому когда она нужна (или её надо снять), отправляем
-    // новое сообщение и удаляем заглушку. В обычном случае — просто правим
-    // заглушку, как и было: в чате не остаётся мусора вроде «Думаю…».
-    if (markup && editId !== undefined) {
+    // Нужны кнопки — только новым сообщением: reply-клавиатура живёт у поля
+    // ввода и к отредактированному сообщению не цепляется. Заглушку тогда
+    // удаляем, чтобы не оставлять «Думаю…» в чате.
+    if (withKeyboard && editId !== undefined) {
       await c.api.deleteMessage(chatId, editId).catch(() => {});
       editId = undefined;
     }
+
+    // Снятие клавиатуры уже ушло вместе с заглушкой. Если заглушки не было
+    // (не отправилась), снимаем здесь — безусловно, без попыток угадать,
+    // висит она или нет.
+    const markup = withKeyboard
+      ? suggestions!.reduce((k, s) => k.text(s).row(), new Keyboard())
+          .oneTime().resized().placeholder('Или напиши своими словами…')
+      : { remove_keyboard: true as const };
 
     for (const attempt of attempts) {
       try {
@@ -235,10 +231,8 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
         if (editId !== undefined) {
           await c.api.editMessageText(chatId, editId, attempt.text, parse);
         } else {
-          await c.reply(attempt.text, { ...parse, ...(markup ? { reply_markup: markup } : {}) });
+          await c.reply(attempt.text, { ...parse, reply_markup: markup });
         }
-        if (withKeyboard) keyboardShown.add(chatId);
-        else keyboardShown.delete(chatId);
         return;
       } catch (err) {
         log.warn({ html: attempt.html, err: String(err).slice(0, 160) }, 'отправка не прошла, пробуем проще');
