@@ -25,6 +25,8 @@ export interface AgentReply {
   suggestions?: string[];
   /** Висела ли клавиатура до этого ответа — её придётся снимать. */
   keyboardWasShown: boolean;
+  /** Была ли отправлена карточка «Рисую…»: тогда текст идёт новым сообщением. */
+  cardSent?: boolean;
 }
 
 /**
@@ -93,6 +95,7 @@ export async function handleIncoming(
 
   // Агент может предложить кнопки через suggest_replies — собираем сюда.
   let suggestions: string[] = [];
+  let cardSent = false;
 
   let result;
   try {
@@ -109,6 +112,7 @@ export async function handleIncoming(
         userMessage: msg.text,
         lastImageUrl,
         suggest: (options) => { suggestions = options; },
+        notePlaceholderSent: () => { cardSent = true; },
         log: { info: (o, m) => log.info(o as object, m), warn: (o, m) => log.warn(o as object, m) },
       },
     });
@@ -160,6 +164,7 @@ export async function handleIncoming(
     userId: user.id,
     conversationId: conversation.id,
     keyboardWasShown: user.keyboardShown,
+    ...(cardSent ? { cardSent } : {}),
     ...(suggestions.length ? { suggestions } : {}),
   };
 }

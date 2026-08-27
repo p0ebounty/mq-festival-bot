@@ -91,7 +91,10 @@ export async function submitGeneration(
       const placeholderId = await app.sendPlaceholderCard?.(
         ctx.chatId, input.caption?.trim() || 'Рисую…',
       );
-      if (placeholderId) await app.generations.setPlaceholder(gen.id, placeholderId);
+      if (placeholderId) {
+        await app.generations.setPlaceholder(gen.id, placeholderId);
+        ctx.notePlaceholderSent?.();
+      }
       ctx.log.info({ generationId: gen.id, model: model.id, task: input.task }, 'генерация поставлена');
       return {
         ok: true,

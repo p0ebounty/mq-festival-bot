@@ -187,7 +187,11 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       return;
     }
 
-    await send(c, body, placeholderId, reply.suggestions, reply.keyboardWasShown);
+    // Если ушла карточка «Рисую…», свой текст отправляем НОВЫМ сообщением:
+    // заглушка была отправлена раньше карточки, и правка легла бы НАД ней.
+    // Участнику логичнее видеть сначала картинку-место, потом пояснение.
+    await send(c, body, reply.cardSent ? undefined : placeholderId,
+      reply.suggestions, reply.keyboardWasShown, reply.cardSent ? placeholderId : undefined);
   }
 
   /**
@@ -197,7 +201,12 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   async function send(
     c: Ctx, raw: string, editId: number | undefined,
     suggestions?: string[], keyboardWasShown = false,
+    dropMessageId?: number,
   ): Promise<void> {
+    // Заглушка больше не нужна: текст пойдёт новым сообщением под карточкой.
+    if (dropMessageId !== undefined) {
+      await c.api.deleteMessage(c.chat!.id, dropMessageId).catch(() => {});
+    }
     const { html, plain, useHtml } = prepareMessage(raw);
 
     const attempts: Array<{ text: string; html: boolean }> = useHtml
