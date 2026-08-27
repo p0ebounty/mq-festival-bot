@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { RadioIcon, RadioTowerIcon } from 'lucide-react';
+import {
+  Tooltip, TooltipContent, TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 /**
  * Живое обновление всей админки одним компонентом.
@@ -40,18 +44,22 @@ export function LiveUpdates() {
     };
   }, [router]);
 
+  const Icon = live ? RadioTowerIcon : RadioIcon;
+
   return (
-    <span
-      className="flex items-center gap-1.5"
-      aria-live="polite"
-    >
-      <span
-        className={`size-1.5 rounded-full ${live ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`}
-        aria-hidden
-      />
-      <span className="text-muted-foreground hidden text-xs lg:inline">
-        {live ? 'обновляется' : 'нет связи'}
-      </span>
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={live ? 'text-emerald-500' : 'text-muted-foreground/50'}
+          aria-live="polite"
+          aria-label={live ? 'Данные обновляются сами' : 'Связь с сервером потеряна'}
+        >
+          <Icon className="size-4" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {live ? 'Данные обновляются сами' : 'Связь потеряна, данные могут устареть'}
+      </TooltipContent>
+    </Tooltip>
   );
 }

@@ -70,12 +70,28 @@ test.describe('страницы админки', () => {
     });
   }
 
-  test('навигация ведёт по всем разделам', async ({ page }) => {
+  test('боковое меню ведёт по всем разделам', async ({ page }) => {
     await page.goto('/');
     for (const p of PAGES.slice(1)) {
-      await page.getByRole('navigation').getByRole('link', { name: p.nav, exact: true }).click();
+      await page.getByRole('link', { name: p.nav, exact: true }).first().click();
       await expect(page.getByRole('heading', { name: p.title, level: 1 })).toBeVisible();
     }
+  });
+
+  test('меню сворачивается и помнит это между страницами', async ({ page }) => {
+    await page.goto('/');
+    const sidebar = page.locator('[data-slot="sidebar"]').first();
+    await expect(sidebar).toHaveAttribute('data-state', 'expanded');
+
+    await page.getByRole('button', { name: /меню|sidebar/i }).first().click();
+    await expect(sidebar).toHaveAttribute('data-state', 'collapsed');
+
+    // Состояние живёт в cookie, поэтому переживает переход.
+    await page.goto('/users');
+    await expect(page.locator('[data-slot="sidebar"]').first())
+      .toHaveAttribute('data-state', 'collapsed');
+
+    await page.getByRole('button', { name: /меню|sidebar/i }).first().click();
   });
 
   for (const scheme of ['light', 'dark'] as const) {
@@ -148,7 +164,8 @@ test.describe('страницы админки', () => {
    */
   test('SSE подключается и доносит изменение из базы', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('обновляется')).toBeVisible();
+    // Индикатор — иконка без подписи, поэтому ищем по доступному имени.
+    await expect(page.getByLabel('Данные обновляются сами')).toBeVisible();
 
     const got = await page.evaluate(() => new Promise<string[]>((resolve) => {
       const events: string[] = [];

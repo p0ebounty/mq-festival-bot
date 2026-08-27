@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { conversationThread } from '@/lib/queries';
 import { ToolCall } from '@/components/tool-call';
+import { FollowNewMessages } from './follow';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeftIcon, UserIcon } from 'lucide-react';
@@ -21,10 +22,13 @@ export default async function DialogPage({ params }: PageProps<'/dialogs/[id]'>)
   if (!data) notFound();
 
   const { conversation: c, messages } = data;
+  // Живое обновление дописывает сообщения снизу — следуем за ними.
+  const followKey = messages.length + messages.reduce((n, m) => n + m.calls.length, 0);
   const totalTools = messages.reduce((n, m) => n + m.calls.length, 0);
 
   return (
     <div className="space-y-6">
+      <FollowNewMessages count={followKey} />
       <div className="mx-auto flex w-full max-w-4xl flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-semibold">{userLabel(c)}</h1>
