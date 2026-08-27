@@ -140,14 +140,11 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     // в чате не остаётся мусора вроде «Думаю…».
     let placeholderId: number | undefined;
     try {
-      // К заглушке цепляем снятие клавиатуры. Это единственное НОВОЕ
-      // сообщение в обороте, а reply-клавиатуру можно менять только при
-      // отправке — к отредактированному сообщению её не прицепить.
-      //
-      // Шлём безусловно, не пытаясь помнить, висит ли она: клавиатура живёт
-      // на клиенте, а память процесса умирает при каждом перезапуске.
-      // Именно на этом сломалась прошлая версия — подсказки висели вечно.
-      const sent = await c.reply(phrases.thinking(), { reply_markup: { remove_keyboard: true } });
+      // ⚠️ БЕЗ reply_markup. Проверено запросами к API: сообщение,
+      // отправленное с remove_keyboard, Telegram делает НЕРЕДАКТИРУЕМЫМ —
+      // editMessageText отвечает «message can't be edited». Прошлая версия
+      // цепляла снятие сюда, и ответ участнику не уходил вообще.
+      const sent = await c.reply(phrases.thinking());
       placeholderId = sent.message_id;
     } catch {
       // Не смогли — не беда, просто ответим обычным сообщением.
@@ -190,7 +187,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       return;
     }
 
-    await send(c, body, placeholderId, reply.suggestions);
+    await send(c, body, placeholderId, reply.suggestions, reply.keyboardWasShown);
   }
 
   /**
@@ -198,7 +195,8 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
    * текстом: потерять оформление не страшно, потерять сообщение страшно.
    */
   async function send(
-    c: Ctx, raw: string, editId: number | undefined, suggestions?: string[],
+    c: Ctx, raw: string, editId: number | undefined,
+    suggestions?: string[], keyboardWasShown = false,
   ): Promise<void> {
     const { html, plain, useHtml } = prepareMessage(raw);
 
@@ -209,33 +207,43 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     const chatId = c.chat!.id;
     const withKeyboard = Boolean(suggestions?.length);
 
-    // Нужны кнопки — только новым сообщением: reply-клавиатура живёт у поля
-    // ввода и к отредактированному сообщению не цепляется. Заглушку тогда
-    // удаляем, чтобы не оставлять «Думаю…» в чате.
-    if (withKeyboard && editId !== undefined) {
+    // Клавиатуру можно задать только при ОТПРАВКЕ — к правке не цепляется.
+    // Значит новым сообщением отвечаем в двух случаях: ставим кнопки или
+    // снимаем висящие. В остальном правим заглушку, как и раньше.
+    const markup = withKeyboard
+      ? suggestions!.reduce((k, s) => k.text(s).row(), new Keyboard())
+          .oneTime().resized().placeholder('Или напиши своими словами…')
+      : keyboardWasShown
+        ? { remove_keyboard: true as const }
+        : undefined;
+
+    if (markup && editId !== undefined) {
       await c.api.deleteMessage(chatId, editId).catch(() => {});
       editId = undefined;
     }
 
-    // Снятие клавиатуры уже ушло вместе с заглушкой. Если заглушки не было
-    // (не отправилась), снимаем здесь — безусловно, без попыток угадать,
-    // висит она или нет.
-    const markup = withKeyboard
-      ? suggestions!.reduce((k, s) => k.text(s).row(), new Keyboard())
-          .oneTime().resized().placeholder('Или напиши своими словами…')
-      : { remove_keyboard: true as const };
-
     for (const attempt of attempts) {
-      try {
-        const parse = attempt.html ? { parse_mode: 'HTML' as const } : {};
-        if (editId !== undefined) {
-          await c.api.editMessageText(chatId, editId, attempt.text, parse);
-        } else {
-          await c.reply(attempt.text, { ...parse, reply_markup: markup });
+      // Сначала правка (если можно), потом — обязательно отправка новым.
+      // Без второго шага участник при сбое правки не получал НИЧЕГО:
+      // живой случай 27.08, обе попытки упёрлись в «message can't be edited».
+      const ways: Array<() => Promise<unknown>> = [];
+      const parse = attempt.html ? { parse_mode: 'HTML' as const } : {};
+      if (editId !== undefined) {
+        ways.push(() => c.api.editMessageText(chatId, editId!, attempt.text, parse));
+      }
+      ways.push(async () => {
+        if (editId !== undefined) await c.api.deleteMessage(chatId, editId).catch(() => {});
+        return c.reply(attempt.text, { ...parse, ...(markup ? { reply_markup: markup } : {}) });
+      });
+
+      for (const way of ways) {
+        try {
+          await way();
+          return;
+        } catch (err) {
+          log.warn({ html: attempt.html, err: String(err).slice(0, 140) },
+            'отправка не прошла, пробуем следующий способ');
         }
-        return;
-      } catch (err) {
-        log.warn({ html: attempt.html, err: String(err).slice(0, 160) }, 'отправка не прошла, пробуем проще');
       }
     }
     log.error({ chatId: c.chat?.id }, 'не удалось отправить ответ ни одним способом');

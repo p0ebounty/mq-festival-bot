@@ -1,6 +1,6 @@
 import {
   createDb, generationsRepo, mediaRepo, conversationsRepo, usersRepo, tokensRepo,
-  worldsRepo, type Db,
+  worldsRepo, keyboardRepo, type Db,
 } from '@mq/db';
 import { SettingsService } from '@mq/config';
 import {
@@ -25,6 +25,7 @@ export interface AppContext {
   users: ReturnType<typeof usersRepo>;
   tokens: ReturnType<typeof tokensRepo>;
   worlds: ReturnType<typeof worldsRepo>;
+  keyboard: ReturnType<typeof keyboardRepo>;
   registry: ToolRegistry;
   /**
    * Досылка готовой генерации участнику. Ставится после создания бота —
@@ -83,6 +84,7 @@ export function createContext(): AppContext {
     users: usersRepo(db),
     tokens: tokensRepo(db),
     worlds: worldsRepo(db),
+    keyboard: keyboardRepo(db),
     registry: new ToolRegistry(),
     chatProvider,
   };

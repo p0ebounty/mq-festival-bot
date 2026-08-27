@@ -47,6 +47,14 @@ export const users = pgTable('users', {
    * мир цепочкой: шторм → роботы → акварель, каждый раз от предыдущего.
    */
   currentWorldMediaId: uuid('current_world_media_id'),
+  /**
+   * Висит ли у участника клавиатура подсказок.
+   *
+   * В БД, а не в памяти процесса: клавиатура живёт на клиенте и переживает
+   * перезапуски бота. Держали в памяти — после hot-reload флаг обнулялся,
+   * команда на снятие не уходила, кнопки висели вечно.
+   */
+  keyboardShown: boolean('keyboard_shown').notNull().default(false),
   isBanned: boolean('is_banned').notNull().default(false),
   bannedReason: text('banned_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
