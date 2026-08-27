@@ -48,9 +48,16 @@ step "сборка"
 step "миграции"
 ( cd "$PROD_DIR" && APP_ENV=prod pnpm db:migrate )
 
-step "наполнение (профессии, миры, настройки)"
-( cd "$PROD_DIR/apps/admin" && APP_ENV=prod ./node_modules/.bin/tsx scripts/seed-admin.mts ) || true
-( cd "$PROD_DIR" && APP_ENV=prod ./node_modules/.bin/tsx scripts/seed-content.mts ) || true
+step "наполнение (админ, профессии, миры, настройки)"
+# ⚠️ Без `|| true`. Первая версия глушила ошибки — и выкат «прошёл» с
+# пустой таблицей администраторов: войти в админку было некем, а узнали
+# бы об этом уже на фестивале.
+#
+# tsx лежит в КОРНЕ монорепо, а не в apps/admin: pnpm ставит его туда,
+# потому что это корневая dev-зависимость.
+TSX="$PROD_DIR/node_modules/.bin/tsx"
+( cd "$PROD_DIR/apps/admin" && APP_ENV=prod "$TSX" scripts/seed-admin.mts )
+( cd "$PROD_DIR" && APP_ENV=prod "$TSX" scripts/seed-content.mts )
 
 step "systemd"
 for unit in mqbot-prod-bot mqbot-prod-admin; do
@@ -74,8 +81,11 @@ sed -e "s/__BOT_PORT__/$BOT_PORT/" -e "s/__ADMIN_PORT__/$ADMIN_PORT/" \
 chmod 644 /docker/traefik/dynamic/mqbot-prod.yml
 
 step "ждём подъёма"
-for i in $(seq 1 30); do
-  if curl -sS -o /dev/null "https://$DOMAIN/healthz" 2>/dev/null; then break; fi
+# ⚠️ Проверяем КОД ответа, а не успех curl: на 502 curl выходит с нулём,
+# и цикл проскакивал мгновенно — smoke бежал по ещё не поднятому стенду.
+for i in $(seq 1 45); do
+  code=$(curl -sS -o /dev/null -w '%{http_code}' "https://$DOMAIN/healthz" 2>/dev/null || echo 000)
+  [ "$code" = "200" ] && { printf '  поднялся за ~%s с\n' "$((i * 2))"; break; }
   sleep 2
 done
 

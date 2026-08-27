@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
-  Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 
@@ -90,16 +90,15 @@ export function LoginForm() {
               {errors.password ? <FieldError>{errors.password.message}</FieldError> : null}
             </Field>
           </FieldGroup>
-        </CardContent>
 
-        {/* Отступ сверху: без него кнопка прилипает к полю пароля —
-            карточка shadcn задаёт подвалу нулевой верхний паддинг. */}
-        <CardFooter className="pt-6">
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {/* Кнопка внутри контента, а не в CardFooter: у подвала shadcn
+              есть верхняя граница, и на форме входа она вставала линией
+              вплотную к полю пароля — разделять там нечего. */}
+          <Button type="submit" className="mt-6 w-full" disabled={isSubmitting}>
             {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
             Войти
           </Button>
-        </CardFooter>
+        </CardContent>
       </form>
     </Card>
   );
