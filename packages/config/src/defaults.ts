@@ -41,6 +41,12 @@ export const SETTINGS_SCHEMA = {
     label: 'Хештеги для репоста',
   },
 
+  // ── присмотр за стендом ──
+  // Кому писать про кончающиеся кредиты. Пусто — не писать никому.
+  // Telegram id владельца; узнать его можно у @userinfobot.
+  'ops.alertChatId':  { type: 'string', default: '', label: 'Telegram id для тревог' },
+  'ops.lowCredits':   { type: 'int', default: 200, min: 0, max: 100000, label: 'Порог тревоги по кредитам' },
+
   // ── хранение ──
   'media.retentionDays':   { type: 'int', default: 30, min: 1, max: 365, label: 'Хранить медиа, дней' },
 } as const;

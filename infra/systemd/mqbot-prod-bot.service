@@ -1,0 +1,28 @@
+[Unit]
+Description=MQ Bot — prod (bot + API)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/mqbot-prod/apps/bot
+Environment=APP_ENV=prod
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Прод запускается собранным: транспиляция на лету и слежение за файлами
+# здесь не нужны, а лишняя секунда старта на фестивале заметна.
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mqbot-prod-bot
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/srv/mqbot-prod /var/lib/mqbot
+
+[Install]
+WantedBy=multi-user.target
