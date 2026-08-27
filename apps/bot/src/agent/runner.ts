@@ -64,6 +64,17 @@ export async function handleIncoming(
   const history = await app.conversations.history(conversation.id, historyLimit);
   // Фото могло прийти сообщением раньше, чем просьба «сделай меня космонавтом».
   const lastImageUrl = msg.imageUrls?.[0] ?? (await app.conversations.lastImageUrl(conversation.id)) ?? undefined;
+
+  // Что участник видел последним: свежая генерация или присланное фото.
+  // Если фото пришло прямо сейчас — оно и есть текущее, ничего не ищем.
+  let currentImageUrl = lastImageUrl;
+  if (!msg.imageUrls?.length) {
+    const last = await app.generations.lastResult(user.id);
+    if (last?.mediaId) {
+      const url = await app.uploadStoredMedia?.(last.mediaId);
+      if (url) currentImageUrl = url;
+    }
+  }
   const priorMessages: AgentMessage[] = history
     .filter((m) => m.role !== 'system' && (m.text ?? '').length > 0)
     .map((m): AgentMessage => ({
@@ -91,6 +102,8 @@ export async function handleIncoming(
     firstName: user.firstName,
     tokenBalance: user.tokenBalance,
     costPerImage,
+    hasWorld: Boolean(user.currentWorldMediaId),
+    hasImage: Boolean(currentImageUrl),
   });
 
   // Агент может предложить кнопки через suggest_replies — собираем сюда.
@@ -111,6 +124,7 @@ export async function handleIncoming(
         chatId: msg.chatId,
         userMessage: msg.text,
         lastImageUrl,
+        currentImageUrl,
         suggest: (options) => { suggestions = options; },
         notePlaceholderSent: () => { cardSent = true; },
         log: { info: (o, m) => log.info(o as object, m), warn: (o, m) => log.warn(o as object, m) },
