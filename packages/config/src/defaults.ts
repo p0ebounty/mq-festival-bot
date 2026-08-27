@@ -25,7 +25,6 @@ export const SETTINGS_SCHEMA = {
   'limits.concurrent':     { type: 'int', default: 1,  min: 1, max: 10,  label: 'Одновременных генераций' },
 
   // ── агент ──
-  'agent.systemPrompt':    { type: 'text',   default: '', label: 'Системный промпт' },
   'agent.maxToolIterations': { type: 'int',  default: 8, min: 1, max: 20, label: 'Лимит итераций tool-use' },
   'agent.historyMessages': { type: 'int',    default: 20, min: 4, max: 100, label: 'Сообщений в контексте' },
   // Сколько картинок диалога реально приложить к запросу (ADR 0010).

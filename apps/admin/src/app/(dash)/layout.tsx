@@ -4,6 +4,7 @@ import { getCurrentAdmin } from '@/lib/auth';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LogoutButton } from '@/components/logout-button';
 import { Nav } from '@/components/nav';
+import { LiveUpdates } from '@/components/live-updates';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { env } from '@/lib/env';
@@ -27,7 +28,8 @@ export default async function DashLayout({ children }: LayoutProps<'/'>) {
             <Nav />
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-3">
+            <LiveUpdates />
             <span className="text-muted-foreground hidden text-sm sm:inline">
               {admin.displayName ?? admin.login}
             </span>

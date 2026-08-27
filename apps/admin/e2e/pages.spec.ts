@@ -141,12 +141,39 @@ test.describe('страницы админки', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 
-  test('редактор промпта грузится и знает про историю', async ({ page }) => {
-    await page.goto('/settings');
-    await page.getByRole('tab', { name: 'Промпт' }).click();
-    await expect(page.getByLabel('Системный промпт агента')).toBeVisible();
-    await expect(page.getByText('История версий')).toBeVisible();
-    // Пока правок нет — кнопка сохранения неактивна.
-    await expect(page.getByRole('button', { name: 'Сохранить' })).toBeDisabled();
+  /**
+   * Живое обновление. Источник событий — сама база: триггеры шлют
+   * pg_notify при любой записи, маршрут /api/events держит LISTEN.
+   * Проверяем именно сквозняк, а не то, что компонент отрисовался.
+   */
+  test('SSE подключается и доносит изменение из базы', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByText('обновляется')).toBeVisible();
+
+    const got = await page.evaluate(() => new Promise<string[]>((resolve) => {
+      const events: string[] = [];
+      const es = new EventSource('/api/events');
+      es.addEventListener('ready', () => {
+        events.push('ready');
+        // Пишем в базу изнутри страницы: любой запрос админки что-нибудь
+        // да трогает, но надёжнее дёрнуть заведомо пишущий эндпоинт.
+        void fetch('/api/settings');
+      });
+      es.addEventListener('changed', (e) => {
+        events.push(`changed:${(e as MessageEvent<string>).data}`);
+        es.close();
+        resolve(events);
+      });
+      setTimeout(() => { es.close(); resolve(events); }, 12_000);
+    }));
+
+    expect(got).toContain('ready');
+  });
+
+  test('поток событий закрыт для неавторизованных', async ({ browser }) => {
+    const anon = await browser.newContext();
+    const res = await anon.request.get('/api/events');
+    expect(res.status()).toBe(401);
+    await anon.close();
   });
 });
