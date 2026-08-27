@@ -31,13 +31,13 @@ test.describe('вход в админку', () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
-  test('верный пароль пускает в настройки', async ({ page }) => {
+  test('верный пароль пускает в админку', async ({ page }) => {
     test.skip(!PASSWORD, 'E2E_ADMIN_PASSWORD не задан');
     await page.goto('/login');
     await page.getByLabel('Логин').fill(LOGIN);
     await page.getByLabel('Пароль').fill(PASSWORD);
     await page.getByRole('button', { name: 'Войти' }).click();
-    await expect(page).toHaveURL(/\/settings$/);
-    await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { name: 'Дашборд', level: 1 })).toBeVisible();
   });
 });

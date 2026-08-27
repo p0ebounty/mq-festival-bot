@@ -156,25 +156,32 @@ export function generationsRepo(db: Db) {
     },
 
     /**
-     * Последняя удачная генерация участника — с ней сверяется картинка в
-     * репосте. Берём по участнику, а не по диалогу: пост он мог выложить
-     * вчера, а ссылку прислать сегодня, когда диалог уже остыл.
+     * ВСЕ удачные генерации участника с их перцептивными хешами.
+     *
+     * Именно все, а не последняя: участник мог сделать пять картинок и
+     * выложить вторую. Спрашивать «а какую именно ты выложил?» — плохой
+     * вопрос: человек не помнит формулировок, а бот и так может узнать
+     * картинку сам. Сравнение хешей стоит копейки, скачиваем мы только
+     * картинку с публикации.
+     *
+     * По участнику, а не по диалогу: пост он мог выложить вчера, а ссылку
+     * прислать сегодня, когда диалог уже остыл.
      */
-    async lastSuccessfulForUser(userId: string) {
-      const [row] = await db.select({
+    async successfulWithHashes(userId: string, limit = 60) {
+      return db.select({
         id: generations.id,
         mediaId: generations.outputMediaId,
+        phash: media.phash,
         at: generations.completedAt,
       })
         .from(generations)
+        .innerJoin(media, eq(media.id, generations.outputMediaId))
         .where(and(
           eq(generations.userId, userId),
           eq(generations.status, 'success'),
-          sql`${generations.outputMediaId} is not null`,
         ))
         .orderBy(desc(generations.completedAt))
-        .limit(1);
-      return row;
+        .limit(limit);
     },
 
     /** Сколько задач у пользователя сейчас в работе — для лимита «одна за раз». */

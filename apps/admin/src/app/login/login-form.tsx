@@ -43,7 +43,7 @@ export function LoginForm() {
       form.setValue('password', '');
       return;
     }
-    router.replace('/settings');
+    router.replace('/');
     router.refresh();
   }
 

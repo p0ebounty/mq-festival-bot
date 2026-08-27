@@ -303,6 +303,22 @@ export const adminSessions = pgTable('admin_sessions', {
   index('admin_sessions_expires_idx').on(t.expiresAt),
 ]);
 
+/**
+ * История системного промпта агента.
+ *
+ * Промпт — это характер бота, и правят его на живом фестивале. Нужна
+ * возможность увидеть, что было час назад, и вернуть одним нажатием:
+ * неудачная правка ломает не страницу, а все ответы сразу.
+ */
+export const promptVersions = pgTable('prompt_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  value: text('value').notNull(),
+  /** Пусто — значит вернулись к промпту по умолчанию из кода. */
+  note: text('note'),
+  adminUserId: uuid('admin_user_id').references(() => adminUsers.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('prompt_versions_created_idx').on(t.createdAt)]);
+
 export const auditLog = pgTable('audit_log', {
   id: uuid('id').primaryKey().defaultRandom(),
   adminUserId: uuid('admin_user_id').references(() => adminUsers.id, { onDelete: 'set null' }),

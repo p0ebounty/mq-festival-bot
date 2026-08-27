@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PromptEditor } from './prompt-editor';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -101,6 +102,8 @@ export function SettingsView({ initial, routes }: Props) {
           <TabsTrigger value="provider">Провайдер</TabsTrigger>
           <TabsTrigger value="economy">Экономика</TabsTrigger>
           <TabsTrigger value="limits">Лимиты</TabsTrigger>
+          <TabsTrigger value="share">Шаринг</TabsTrigger>
+          <TabsTrigger value="prompt">Промпт</TabsTrigger>
         </TabsList>
 
         {/* ───────────── Провайдер ───────────── */}
@@ -283,7 +286,10 @@ export function SettingsView({ initial, routes }: Props) {
                   hint="Списывается до постановки задачи; при ошибке возвращается." />
                 <TextSetting id="social-bonus" label="Бонус за репост" settingKey="economy.socialBonus"
                   rows={rows} onSave={save} saving={saving} numeric
-                  hint="Начисляется после проверки скриншота публикации." />
+                  hint="Начисляется после проверки публикации по ссылке." />
+                <TextSetting id="weak-limit" label="Лимит слабых подтверждений" settingKey="economy.weakProofLimit"
+                  rows={rows} onSave={save} saving={saving} numeric
+                  hint="Сколько раз участнику можно начислить бонус, когда картинку на публикации не удалось сверить точно. 0 — только точное совпадение." />
               </FieldGroup>
             </CardContent>
           </Card>
@@ -307,9 +313,47 @@ export function SettingsView({ initial, routes }: Props) {
                   hint="Сколько раз агент может вызвать инструменты за один ответ." />
                 <TextSetting id="history" label="Сообщений в контексте" settingKey="agent.historyMessages"
                   rows={rows} onSave={save} saving={saving} numeric />
+                <TextSetting id="images-ctx" label="Картинок в контексте" settingKey="agent.imagesInContext"
+                  rows={rows} onSave={save} saving={saving} numeric
+                  hint="Сколько картинок диалога прикладывается к запросу. Одна — это 1,5–6 тысяч входных токенов." />
                 <TextSetting id="retention" label="Хранить медиа, дней" settingKey="media.retentionDays"
                   rows={rows} onSave={save} saving={saving} numeric />
               </FieldGroup>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        {/* ───────────── Шаринг ───────────── */}
+        <TabsContent value="share">
+          <Card>
+            <CardHeader>
+              <CardTitle>Страница результата и репосты</CardTitle>
+              <CardDescription>
+                Хештеги видны участнику на странице по QR-коду и в подписи к коду.
+                Точные значения нужно согласовать с заказчиком.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FieldGroup>
+                <TextSetting id="hashtags" label="Хештеги для репоста" settingKey="share.hashtags"
+                  rows={rows} onSave={save} saving={saving}
+                  hint="На проверку публикации не влияют — только показываются участнику." />
+              </FieldGroup>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ───────────── Промпт ───────────── */}
+        <TabsContent value="prompt">
+          <Card>
+            <CardHeader>
+              <CardTitle>Системный промпт агента</CardTitle>
+              <CardDescription>
+                Характер бота. Применяется со следующего сообщения, рестарт не нужен.
+                Прошлая версия сохраняется автоматически — откатиться можно одним нажатием.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PromptEditor />
             </CardContent>
           </Card>
         </TabsContent>

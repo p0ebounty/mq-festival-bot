@@ -64,6 +64,13 @@
       "when": 1787818747042,
       "tag": "0008_smart_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787820830045,
+      "tag": "0009_useful_wendell_vaughn",
+      "breakpoints": true
     }
   ]
 }
