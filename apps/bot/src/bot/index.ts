@@ -100,7 +100,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
 
     if (placement.status === 'queued') {
       // Честно говорим, что приняли и вернёмся — но работать будем по порядку.
-      await c.reply(phrases.queued(), { reply_markup: { remove_keyboard: true } }).catch(() => {});
+      await c.reply(phrases.queued(placement.ahead), { reply_markup: { remove_keyboard: true } }).catch(() => {});
     }
   }
 

@@ -1,0 +1,28 @@
+[Unit]
+Description=MQ Bot — prod admin (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/mqbot-prod/apps/admin
+Environment=APP_ENV=prod
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Порт приходит из .env.prod через ADMIN_PORT — см. deploy-prod.sh.
+EnvironmentFile=/srv/mqbot-prod/.env.prod
+ExecStart=/bin/sh -c 'exec /srv/mqbot-prod/apps/admin/node_modules/.bin/next start -p "$ADMIN_PORT"'
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mqbot-prod-admin
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/srv/mqbot-prod
+
+[Install]
+WantedBy=multi-user.target

@@ -6,6 +6,7 @@ import { registerMediaRoutes } from './routes/media.js';
 import { registerShareRoutes } from './routes/share.js';
 import { registerTelegramWebhook, installWebhook } from './routes/telegram.js';
 import { startReconcileWorker } from './workers/reconcile.js';
+import { startHousekeepingWorker } from './workers/housekeeping.js';
 import { createBot } from './bot/index.js';
 import { makeDeliverer } from './bot/deliver.js';
 import { registerShareButton } from './bot/share-button.js';
@@ -64,12 +65,24 @@ ctx.sendPlaceholderCard = makePlaceholderSender(bot, app.log);
 registerShareButton(ctx, bot, app.log);
 registerTelegramWebhook(app, bot);
 
+ctx.sendAlert = async (chatId, text) => {
+  await bot.api.sendMessage(Number(chatId), text);
+};
+
 const reconciler = startReconcileWorker(ctx, app.log);
+
+// Уборка и присмотр: удаление старых медиа и тревога по кредитам kie.ai.
+const alertRaw = await ctx.settings.get('ops.alertChatId');
+const housekeeper = startHousekeepingWorker(ctx, app.log, {
+  lowCreditsThreshold: await ctx.settings.getInt('ops.lowCredits'),
+  ...(/^-?\d+$/.test(alertRaw.trim()) ? { alertChatId: BigInt(alertRaw.trim()) } : {}),
+});
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.once(sig, () => {
     app.log.info(`получен ${sig}, останавливаемся`);
     reconciler.stop();
+    housekeeper.stop();
     void closeBrowser()
       .then(() => app.close())
       .then(() => process.exit(0));

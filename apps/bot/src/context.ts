@@ -38,6 +38,12 @@ export interface AppContext {
    * иначе получился бы цикл: боту нужен контекст, контексту нужен бот.
    */
   deliverGeneration?: (generationId: string) => Promise<void>;
+  /**
+   * Служебное сообщение владельцу — например, что кредиты kie.ai кончаются.
+   * Отдельно от `sendMedia`: это не участнику, и молчаливый сбой здесь
+   * допустим, а там нет.
+   */
+  sendAlert?: (chatId: bigint, text: string) => Promise<void>;
   /** Отправка сохранённой картинки участнику (базовый мир). */
   sendMedia?: (chatId: bigint, mediaId: string, caption: string) => Promise<boolean>;
   /** Заливка нашей картинки в хранилище kie.ai — модели нужен URL. */

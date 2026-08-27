@@ -5,7 +5,9 @@ set -uo pipefail
 ENVNAME="${1:-dev}"
 case "$ENVNAME" in
   dev)  HOST="bot-dev.example.com"; PORT=3001 ;;
-  prod) HOST="bot.example.com";     PORT=4001 ;;
+  # Порт прода приходит из .env.prod через deploy-prod.sh: держать его
+  # здесь копией — значит однажды проверять не тот процесс.
+  prod) HOST="bot.example.com";     PORT="${BOT_PORT:-4001}" ;;
   *) echo "usage: $0 [dev|prod]"; exit 2 ;;
 esac
 

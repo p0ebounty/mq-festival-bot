@@ -24,6 +24,16 @@ const QUEUED = [
   'Понял, беру в работу после текущего.',
 ];
 
+/**
+ * Сколько дел впереди. Правило 20-bot-agent обещает участнику **честное**
+ * «ты в очереди, №N»: без числа человек не понимает, ждать ему секунду
+ * или минуту, и пишет повторно — то есть удлиняет ту самую очередь.
+ */
+function ahead(n: number): string {
+  if (n <= 1) return '';
+  return ` Передо мной ещё ${n} ${n < 5 ? 'твоих дела' : 'твоих дел'}.`;
+}
+
 const QUEUE_FULL = [
   'Слушай, ты меня закидал 🙂 Давай по одному — я всё ещё разгребаю.',
   'Столько сразу не унесу. Дай доделать то, что уже набрал.',
@@ -91,7 +101,7 @@ function pick(list: readonly string[]): string {
 
 export const phrases = {
   thinking: () => pick(THINKING),
-  queued: () => pick(QUEUED),
+  queued: (n = 1) => `${pick(QUEUED)}${ahead(n)}`,
   queueFull: () => pick(QUEUE_FULL),
   rateLimited: () => pick(RATE_LIMITED),
   overloaded: () => pick(OVERLOADED),

@@ -1,0 +1,43 @@
+# ШАБЛОН маршрутов prod-стенда.
+#
+# Порты подставляет scripts/deploy-prod.sh из .env.prod: держать их в двух
+# местах — верный способ однажды развести Traefik и приложение.
+#
+# Маршруты prod-стенда. Устройство то же, что у dev (ADR 0001):
+# Traefik в network_mode: host ходит в systemd-сервисы на 127.0.0.1.
+#
+# ⚠️ Префиксы пишем СО СЛЭШЕМ. `PathPrefix(`/g`)` ловит и `/generations`,
+# и страница админки уезжает боту с 404 — так уже было на dev.
+#
+# ⚠️ rule — ОДНОЙ строкой. Свёрнутый скаляр YAML сохраняет перевод строки,
+# и Traefik отвергает правило с "expected ')', found newline".
+http:
+  routers:
+    mqbot-prod-bot:
+      rule: "Host(`bot.example.com`) && (PathPrefix(`/tg/`) || PathPrefix(`/g/`) || PathPrefix(`/media/`) || PathPrefix(`/hooks/`) || Path(`/healthz`))"
+      entryPoints: [websecure]
+      service: mqbot-prod-bot
+      priority: 100
+      tls:
+        certResolver: letsencrypt
+
+    mqbot-prod-admin:
+      rule: "Host(`bot.example.com`)"
+      entryPoints: [websecure]
+      service: mqbot-prod-admin
+      priority: 1
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    mqbot-prod-bot:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:__BOT_PORT__
+        passHostHeader: true
+
+    mqbot-prod-admin:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:__ADMIN_PORT__
+        passHostHeader: true
