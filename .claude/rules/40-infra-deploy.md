@@ -52,14 +52,29 @@ systemd + hot-reload:
 
 ## prod-стенд
 
-Docker Compose (`infra/docker/`), образы собираются multi-stage,
-`restart: unless-stopped`, лейблы Traefik как выше.
+⚠️ **Не Docker** — отдельный чекаут `/srv/mqbot-prod` под systemd
+(ADR 0012). Причина: разработка идёт в `/projects/bot`, и `pnpm add`
+там переписал бы `node_modules`, из которых работает прод.
+
+- юниты `mqbot-prod-bot.service`, `mqbot-prod-admin.service`
+  (`infra/systemd/`), `Restart=always`;
+- бот запускается через `tsx` без watch: пакеты монорепо экспортируют
+  `.ts`, и `node dist/index.js` падает на их импортах;
+- админка собирается `next build` и запускается `next start`;
+- маршруты — тот же file-провайдер Traefik (`infra/traefik/mqbot-prod.yml`),
+  порты подставляются из `.env.prod` скриптом выката;
+- выкат и откат — `scripts/deploy-prod.sh [ветка|тег]`, в конце smoke.
+
+День фестиваля — `docs/RUNBOOK.md`.
 
 ## БД
 
 PostgreSQL 16 в Docker, слушает **только** `127.0.0.1:5432`.
 Две базы: `mqbot_dev` и `mqbot_prod`, разные роли и пароли.
-Бэкап — `pg_dump` по cron в `/var/backups/mqbot`, хранение 14 дней.
+Бэкап — `scripts/backup-db.sh` по cron (`/etc/cron.d/mqbot-backup`) в
+`/var/backups/mqbot`, хранение 14 дней: прод каждые 4 часа, dev раз в
+сутки. Скрипт проверяет размер дампа — пустой дамп это не бэкап.
+⚠️ Медиа в дамп НЕ входят, это файлы на диске.
 
 ## Хранилище медиа
 

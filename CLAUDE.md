@@ -35,7 +35,7 @@ Telegram-бот для фестиваля центра «Лидер» × MagnaQo
 | | dev | prod |
 |---|---|---|
 | Домен | `bot-dev.example.com` | `bot.example.com` |
-| Запуск | systemd + hot-reload | Docker Compose |
+| Запуск | systemd + hot-reload | systemd, отдельный чекаут (ADR 0012) |
 | БД | `mqbot_dev` | `mqbot_prod` |
 | Telegram | отдельный бот-токен | отдельный бот-токен |
 
@@ -72,6 +72,7 @@ Telegram-бот для фестиваля центра «Лидер» × MagnaQo
 | `docs/tz/analysis.md` | Разбор ТЗ, пробелы, открытые вопросы |
 | `docs/ARCHITECTURE.md` | Архитектура системы |
 | `docs/decisions/` | ADR — почему принято именно так |
+| `docs/RUNBOOK.md` | **День фестиваля**: что делать, когда что-то сломалось |
 | `docs/vendor/kie/` | Зеркало документации kie.ai (офлайн, грепается) |
 | `.claude/rules/` | Детальные правила по слоям |
 
