@@ -186,7 +186,7 @@ function toResponses(m: AgentMessage): Array<Record<string, unknown>> {
       : [];
     return [...said, ...calls];
   }
-  const media = [...(m.imageUrls ?? []), ...(m.audioDataUrls ?? [])];
+  const media = m.imageUrls ?? [];
   return [{
     role: 'user',
     content: [
