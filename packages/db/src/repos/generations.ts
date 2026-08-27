@@ -42,6 +42,12 @@ export function generationsRepo(db: Db) {
       return row!;
     },
 
+    async setPlaceholder(id: string, messageId: bigint) {
+      await db.update(generations)
+        .set({ placeholderMessageId: messageId })
+        .where(eq(generations.id, id));
+    },
+
     /** Помечает задачу отправленной и запоминает taskId от kie.ai. */
     async markSubmitted(id: string, kieTaskId: string, model: string) {
       await db.update(generations)

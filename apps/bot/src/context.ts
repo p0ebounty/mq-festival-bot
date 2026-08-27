@@ -3,7 +3,10 @@ import {
   worldsRepo, type Db,
 } from '@mq/db';
 import { SettingsService } from '@mq/config';
-import { KieClient, LocalStorage, OpenAiChatProvider, ToolRegistry, type ChatProvider } from '@mq/core';
+import {
+  KieClient, LocalStorage, OpenAiChatProvider, ResponsesApiProvider,
+  ToolRegistry, type ChatProvider,
+} from '@mq/core';
 import { env } from './env.js';
 
 /**
@@ -32,6 +35,11 @@ export interface AppContext {
   sendMedia?: (chatId: bigint, mediaId: string, caption: string) => Promise<boolean>;
   /** Заливка нашей картинки в хранилище kie.ai — модели нужен URL. */
   uploadStoredMedia?: (mediaId: string) => Promise<string | null>;
+  /**
+   * Отправляет карточку «Рисую…» и возвращает id сообщения.
+   * По готовности картинка в этом же сообщении подменяется результатом.
+   */
+  sendPlaceholderCard?: (chatId: bigint, caption: string) => Promise<bigint | null>;
   /** Провайдер собирается на каждый запрос: модель меняется в админке. */
   chatProvider: () => Promise<ChatProvider>;
 }
@@ -48,12 +56,24 @@ export function createContext(): AppContext {
     baseUrl: env.KIE_API_BASE,
   });
 
-  const chatProvider = async (): Promise<ChatProvider> =>
-    new OpenAiChatProvider({
-      getApiKey: () => settings.get('kie.apiKey'),
-      model: await settings.get('kie.chatModel'),
-      buildUrl: (m) => `${env.KIE_API_BASE}/${m}/v1/chat/completions`,
+  /**
+   * Адаптер выбирается по имени модели: у kie.ai три разных формата
+   * (ADR 0008). Gemini — OpenAI-совместимый chat/completions, модели
+   * gpt-5-* — Responses API с потоком SSE на общем пути /codex.
+   */
+  const chatProvider = async (): Promise<ChatProvider> => {
+    const model = await settings.get('kie.chatModel');
+    const getApiKey = () => settings.get('kie.apiKey');
+
+    if (model.startsWith('gpt-5')) {
+      return new ResponsesApiProvider({
+        getApiKey, model, url: `${env.KIE_API_BASE}/codex/v1/responses`, effort: 'low',
+      });
+    }
+    return new OpenAiChatProvider({
+      getApiKey, model, buildUrl: (m) => `${env.KIE_API_BASE}/${m}/v1/chat/completions`,
     });
+  };
 
   return {
     db, settings, storage, kie,

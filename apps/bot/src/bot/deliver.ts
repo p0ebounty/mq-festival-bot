@@ -1,4 +1,4 @@
-import { InputFile } from 'grammy';
+import { InputFile, InputMediaBuilder } from 'grammy';
 import type { Bot } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppContext } from '../context.js';
@@ -21,8 +21,13 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
     }
 
     if (gen.status === 'failed' || gen.status === 'refunded') {
-      await bot.api.sendMessage(Number(gen.tgChatId),
-        'Не получилось нарисовать — картинка не вышла. Токены вернул, попробуй сформулировать чуть иначе.')
+      const text = 'Не получилось нарисовать — картинка не вышла. Токены вернул, попробуй сформулировать чуть иначе.';
+      // Карточку «Рисую…» убираем: висящая заглушка при неудаче выглядит так,
+      // будто работа всё ещё идёт.
+      if (gen.placeholderMessageId) {
+        await bot.api.deleteMessage(Number(gen.tgChatId), Number(gen.placeholderMessageId)).catch(() => {});
+      }
+      await bot.api.sendMessage(Number(gen.tgChatId), text)
         .catch((e: unknown) => log.warn({ generationId, err: String(e) }, 'не смог отправить сообщение о сбое'));
       return;
     }

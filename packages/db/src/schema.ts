@@ -150,6 +150,13 @@ export const generations = pgTable('generations', {
    */
   caption: text('caption'),
 
+  /**
+   * Сообщение-карточка «Рисую…», отправленное сразу при постановке задачи.
+   * По готовности мы подменяем в нём картинку через editMessageMedia —
+   * участник видит превращение на месте, а не два разных сообщения.
+   */
+  placeholderMessageId: bigint('placeholder_message_id', { mode: 'bigint' }),
+
   kieTaskId: text('kie_task_id'),
   failCode: text('fail_code'),
   failMessage: text('fail_message'),

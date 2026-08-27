@@ -15,7 +15,7 @@ import {
   makeListProfessionsTool, makeRestylePhotoTool,
   makeGetBaseWorldTool, makeTransformWorldTool,
 } from './agent/tools/scenarios.js';
-import { makeMediaSender, makeMediaUploader } from './bot/media-out.js';
+import { makeMediaSender, makeMediaUploader, makePlaceholderSender } from './bot/media-out.js';
 
 const app = Fastify({
   logger: {
@@ -57,6 +57,7 @@ const { bot } = createBot(ctx, app.log);
 ctx.deliverGeneration = makeDeliverer(ctx, bot, app.log);
 ctx.sendMedia = makeMediaSender(ctx, bot, app.log);
 ctx.uploadStoredMedia = makeMediaUploader(ctx, app.log);
+ctx.sendPlaceholderCard = makePlaceholderSender(bot, app.log);
 registerTelegramWebhook(app, bot);
 
 const reconciler = startReconcileWorker(ctx, app.log);

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#141824"/>
+      <stop offset="55%" stop-color="#1d2436"/>
+      <stop offset="100%" stop-color="#2a1f3d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="46%" r="42%">
+      <stop offset="0%" stop-color="#6f7cf7" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#6f7cf7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7c8cff"/>
+      <stop offset="50%" stop-color="#c07cff"/>
+      <stop offset="100%" stop-color="#ff9ac1"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#glow)"/>
+
+  <!-- редкие звёзды: фестиваль про будущее -->
+  <g fill="#ffffff" opacity="0.5">
+    <circle cx="150" cy="180" r="2.5"/><circle cx="880" cy="140" r="2"/>
+    <circle cx="270" cy="820" r="2"/><circle cx="790" cy="760" r="2.5"/>
+    <circle cx="520" cy="120" r="1.8"/><circle cx="120" cy="560" r="1.8"/>
+    <circle cx="930" cy="470" r="2.2"/><circle cx="640" cy="900" r="1.8"/>
+    <circle cx="360" cy="300" r="1.5"/><circle cx="700" cy="330" r="1.5"/>
+  </g>
+
+  <!-- кольцо: незамкнутая дуга читается как «идёт работа» -->
+  <circle cx="512" cy="470" r="132" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="14"/>
+  <path d="M 512 338 A 132 132 0 0 1 632 402"
+        fill="none" stroke="url(#ring)" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- рамка кадра внутри кольца: намёк на будущую картинку -->
+  <g stroke="#ffffff" stroke-opacity="0.55" stroke-width="7" stroke-linecap="round" fill="none">
+    <path d="M 462 432 L 462 412 L 482 412"/>
+    <path d="M 542 412 L 562 412 L 562 432"/>
+    <path d="M 562 508 L 562 528 L 542 528"/>
+    <path d="M 482 528 L 462 528 L 462 508"/>
+  </g>
+  <circle cx="512" cy="470" r="17" fill="#ffffff" fill-opacity="0.75"/>
+
+  <text x="512" y="700" text-anchor="middle"
+        font-family="Inter, DejaVu Sans, Arial, sans-serif" font-size="58" font-weight="600"
+        fill="#ffffff" fill-opacity="0.94">Рисую…</text>
+  <text x="512" y="762" text-anchor="middle"
+        font-family="Inter, DejaVu Sans, Arial, sans-serif" font-size="34"
+        fill="#ffffff" fill-opacity="0.55">картинка появится прямо здесь</text>
+
+  <text x="512" y="962" text-anchor="middle"
+        font-family="Inter, DejaVu Sans, Arial, sans-serif" font-size="26" letter-spacing="3"
+        fill="#ffffff" fill-opacity="0.32">ЛИДЕР × MAGNAQORE</text>
+</svg>

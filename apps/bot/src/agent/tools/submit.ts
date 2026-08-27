@@ -38,7 +38,8 @@ export async function submitGeneration(
   if (active >= concurrent) {
     return {
       ok: false,
-      summary: 'У участника уже готовится картинка. Надо дождаться её, потом делать следующую.',
+      summary: 'У участника уже готовится другая картинка.',
+      note: 'Скажи, что доделаешь текущую и сразу возьмёшься за эту.',
       error: 'already_generating',
     };
   }
@@ -49,7 +50,8 @@ export async function submitGeneration(
   if (balance === null) {
     return {
       ok: false,
-      summary: `Токенов не хватает: нужно ${cost}. Бонусные дают за репост готовой картинки в соцсеть.`,
+      summary: `Токенов не хватает: нужно ${cost}, а их меньше.`,
+      note: 'Подскажи, что бонусные токены дают за репост готовой картинки в соцсеть.',
       error: 'insufficient_tokens',
     };
   }
@@ -82,12 +84,21 @@ export async function submitGeneration(
       const payload = buildCreateTask(model, req, `${env.PUBLIC_URL}/hooks/kie`);
       const taskId = await app.kie.createTask(payload);
       await app.generations.markSubmitted(gen.id, taskId, model.kieModel);
+
+      // Карточка «Рисую…» уходит сразу: участник видит место, где появится
+      // картинка, и понимает, что работа идёт. По готовности мы подменим
+      // в этом же сообщении изображение — превращение на месте.
+      const placeholderId = await app.sendPlaceholderCard?.(
+        ctx.chatId, input.caption?.trim() || 'Рисую…',
+      );
+      if (placeholderId) await app.generations.setPlaceholder(gen.id, placeholderId);
       ctx.log.info({ generationId: gen.id, model: model.id, task: input.task }, 'генерация поставлена');
       return {
         ok: true,
         summary:
           `${input.successHint} Картинка придёт отдельным сообщением примерно через минуту. ` +
-          `Списано ${cost} токен(ов), осталось ${balance}. Скажи это участнику своими словами и НЕ жди результат.`,
+          `Списано ${cost} токен(ов), осталось ${balance}.`,
+        note: 'Скажи это своими словами и НЕ жди результат — картинка придёт сама.',
         data: { status: 'accepted', eta_sec: 60, balance_left: balance },
       };
     } catch (err) {
@@ -102,7 +113,8 @@ export async function submitGeneration(
   await app.generations.markFailed(gen.id, 'no_model', lastError);
   return {
     ok: false,
-    summary: 'Сервис генерации сейчас не отвечает. Токены вернул, можно попробовать через минуту.',
+    summary: 'Сервис генерации не ответил. Токены возвращены.',
+    note: 'Предложи попробовать через минуту.',
     error: 'all_models_failed',
   };
 }

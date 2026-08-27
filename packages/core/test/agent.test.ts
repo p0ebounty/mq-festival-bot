@@ -237,9 +237,9 @@ describe('честность про неудачу инструмента', () =
     const payload = JSON.parse(toolMsg!.text!) as Record<string, unknown>;
     expect(payload.ok).toBe(false);
     expect(payload.outcome).toBe('НЕ ВЫПОЛНЕНО');
-    expect(String(payload.instruction)).toContain('НЕ обещай результат');
-    // причина доезжает до модели дословно
-    expect(String(payload.reason)).toContain('Уже готовится другая картинка');
+    expect(String(payload.private_note_do_not_send)).toContain('НЕ обещай результат');
+    // факт доезжает до модели дословно
+    expect(String(payload.what_happened)).toContain('Уже готовится другая картинка');
   });
 
   it('успех остаётся простым и не мусорит служебными полями', async () => {
@@ -249,6 +249,9 @@ describe('честность про неудачу инструмента', () =
     const payload = JSON.parse(r.newMessages.find((m) => m.role === 'tool')!.text!) as Record<string, unknown>;
     expect(payload.ok).toBe(true);
     expect(payload.outcome).toBeUndefined();
+    expect(payload.what_happened).toBe('Повторил: ку');
+    // без note служебного поля вообще нет — нечего случайно процитировать
+    expect(payload.private_note_do_not_send).toBeUndefined();
   });
 });
 

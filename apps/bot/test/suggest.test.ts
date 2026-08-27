@@ -66,12 +66,14 @@ describe('кнопки-подсказки', () => {
       log: { info: () => {}, warn: () => {} },
     });
     expect(r.ok).toBe(false);
-    expect(r.summary).toContain('словами');
+    expect(`${r.summary} ${r.note ?? ''}`).toContain('словами');
   });
 
-  it('просит агента не дублировать кнопки текстом', async () => {
+  it('указание не дублировать кнопки лежит в служебном поле, не в факте', async () => {
     const sink: string[][] = [];
     const r = await tool.run({ options: ['Да'] }, ctxWith(sink));
-    expect(r.summary).toContain('Не дублируй');
+    expect(r.note).toContain('Не дублируй');
+    // в summary только факт — его агент может пересказать участнику
+    expect(r.summary).not.toContain('Не дублируй');
   });
 });
