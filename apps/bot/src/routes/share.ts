@@ -31,9 +31,10 @@ export function registerShareRoutes(app: FastifyInstance, ctx: AppContext): void
     }
 
     const url = shareUrl(env.PUBLIC_URL, row.shortId);
-    const [qrSvg, hashtags] = await Promise.all([
+    const [qrSvg, hashtags, bonusTokens] = await Promise.all([
       renderQrSvg(url),
       ctx.settings.get('share.hashtags'),
+      ctx.settings.getInt('economy.socialBonus'),
     ]);
 
     // Счётчик не держит ответ: статистика не стоит лишней задержки в зале.
@@ -53,6 +54,7 @@ export function registerShareRoutes(app: FastifyInstance, ctx: AppContext): void
         botUrl: ctx.botUrl,
         caption: row.caption,
         hashtags,
+        bonusTokens,
       }));
   });
 
