@@ -92,7 +92,9 @@ export function LoginForm() {
           </FieldGroup>
         </CardContent>
 
-        <CardFooter>
+        {/* Отступ сверху: без него кнопка прилипает к полю пароля —
+            карточка shadcn задаёт подвалу нулевой верхний паддинг. */}
+        <CardFooter className="pt-6">
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? <Spinner data-icon="inline-start" /> : null}
             Войти

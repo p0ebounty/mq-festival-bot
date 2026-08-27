@@ -44,7 +44,10 @@ Chromium, Node 22, pnpm, PostgreSQL — всё установлено и раб�
 
 ```
 /projects/bot      dev   → mqbot-dev-bot:3001,  mqbot-dev-admin:3002
-/srv/mqbot-prod    prod  → mqbot-prod-bot:3011, mqbot-prod-admin:3012
+/srv/mqbot-prod    prod  → mqbot-prod-bot:4001, mqbot-prod-admin:4002
+
+Порты берутся из `.env.prod` и подставляются в шаблон маршрутов Traefik
+скриптом выката: два источника правды однажды разъедутся.
 ```
 
 Выкат — `scripts/deploy-prod.sh`: обновить чекаут, поставить зависимости,
@@ -52,9 +55,13 @@ Chromium, Node 22, pnpm, PostgreSQL — всё установлено и раб�
 
 Отличия от dev, помимо путей:
 
-- **бот собирается** (`tsc`) и запускается как `node dist/index.js`, а не
-  через `tsx watch`: на проде транспиляция на лету и слежение за файлами
-  не нужны;
+- **бот запускается через `tsx` без watch**. Собрать его в `dist` и
+  запускать `node` не выходит: пакеты монорепо экспортируют TypeScript
+  (`main: ./src/index.ts`), и собранный бот падает на
+  `Cannot find module packages/db/src/schema` — tsc собрал только
+  `apps/bot`, а импорты `@mq/core` и `@mq/db` ведут в `.ts`. Собирать ещё
+  и пакеты — менять их экспорты ради секунды старта. `tsc --noEmit`
+  остаётся в выкате как проверка типов;
 - **админка собирается** (`next build`) и запускается `next start`:
   dev-режим Next в разы медленнее и держит лишнюю память;
 - `Restart=always` и `RestartSec` короче: падение на фестивале должно
