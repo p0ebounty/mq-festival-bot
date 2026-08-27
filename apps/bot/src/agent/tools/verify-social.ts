@@ -121,6 +121,17 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
         }
       }
       checks.publicPage = page.public;
+      // ⚠️ Хештеги — СТАТИСТИКА, а не условие начисления. Ни один вердикт от
+      // них не зависит, и проверяющему их не показывают.
+      //
+      // Причина простая: отсутствие хештегов почти всегда означает, что мы не
+      // смогли прочитать текст, а не что участник их не поставил. VK режет
+      // og:description, t.me отдаёт обрезанную карточку канала, Instagram не
+      // отдаёт ничего. Отказывать за собственную слепоту нельзя — по ADR 0007
+      // ложное «нет» стоит дороже ложного «да».
+      //
+      // В админке доля постов с хештегами всё равно нужна: по ней видно,
+      // работает ли просьба на странице результата.
       checks.hashtags = page.text ? hasAnyHashtag(page.text, hashtags) : false;
 
       // ── шаг 3: сверка перцептивного хеша — сильное доказательство ──
@@ -185,7 +196,6 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
           ourImageUrl: ourUrl,
           postImageUrls: postImages,
           pageText: page.text,
-          hashtags,
           pageWasPublic: page.public,
         });
       } catch (err) {

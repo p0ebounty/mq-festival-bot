@@ -155,6 +155,31 @@ describe('страница результата', () => {
     expect(html).not.toContain('<script>bad()');
   });
 
+  /**
+   * Про бонус участник должен узнавать в момент, когда сам собрался
+   * делиться. До этой правки фича была, а знать о ней было неоткуда:
+   * бот рассказывал про бонус только если его спрашивали.
+   */
+  it('зовёт прислать ссылку и называет размер бонуса', () => {
+    const html = renderSharePage({ ...base, bonusTokens: 3, botUrl: 'https://t.me/mq_bot' });
+    expect(html).toContain('пришли ссылку на пост');
+    expect(html).toContain('<b>3 токена</b>');
+  });
+
+  it('склоняет «токен» по-русски', () => {
+    const say = (n: number) => renderSharePage({ ...base, bonusTokens: n });
+    expect(say(1)).toContain('1 токен<');
+    expect(say(3)).toContain('3 токена<');
+    expect(say(5)).toContain('5 токенов<');
+    expect(say(11)).toContain('11 токенов<');
+    expect(say(22)).toContain('22 токена<');
+  });
+
+  it('при нулевом бонусе не обещает того, чего нет', () => {
+    expect(renderSharePage({ ...base, bonusTokens: 0 })).not.toContain('Начислим');
+    expect(renderSharePage(base)).not.toContain('Начислим');
+  });
+
   it('просит поисковики не индексировать', () => {
     // Ссылка публичная, но это личная картинка участника, а не витрина.
     expect(renderSharePage(base)).toContain('name="robots" content="noindex"');

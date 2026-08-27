@@ -64,13 +64,22 @@ export function registerShareButton(app: AppContext, bot: Bot, log: FastifyBaseL
 
     const page = shareUrl(env.PUBLIC_URL, link.shortId);
     try {
-      const [png, hashtags] = await Promise.all([
+      const [png, hashtags, bonus] = await Promise.all([
         renderQrPng(page),
         app.settings.get('share.hashtags'),
+        app.settings.getInt('economy.socialBonus'),
       ]);
       const tags = hashtags.trim();
+
+      // Здесь же говорим про бонус. Это ЕДИНСТВЕННЫЙ момент, когда участник
+      // сам собрался делиться, — и до этой правки он о бонусе не узнавал
+      // вообще, если не спрашивал. Фича была, а знать о ней было неоткуда.
+      const offer = bonus > 0
+        ? `\n\nВыложишь в соцсети — пришли мне ссылку на пост, начислю ещё ${bonus} ${tokenWord(bonus)}.`
+        : '';
+
       await ctx.replyWithPhoto(new InputFile(png, 'qr.png'), {
-        caption: `Наведи камеру — откроется страница со скачиванием.\n${page}${tags ? `\n\n${tags}` : ''}`,
+        caption: `Наведи камеру — откроется страница со скачиванием.\n${page}${tags ? `\n\n${tags}` : ''}${offer}`,
         disable_notification: true,
       });
       log.info({ generationId, shortId: link.shortId }, 'отправлена QR-карточка по кнопке');
@@ -80,4 +89,15 @@ export function registerShareButton(app: AppContext, bot: Bot, log: FastifyBaseL
       return done('Не получилось прислать код, попробуй ещё раз');
     }
   });
+}
+
+/** Склонение «токен» — иначе бот пишет «начислю 3 токен». */
+function tokenWord(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'токенов';
+  switch (n % 10) {
+    case 1: return 'токен';
+    case 2: case 3: case 4: return 'токена';
+    default: return 'токенов';
+  }
 }

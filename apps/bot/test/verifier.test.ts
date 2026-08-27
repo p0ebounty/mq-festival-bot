@@ -56,8 +56,7 @@ describe('запрос к проверяющему', () => {
   const evidence = {
     ourImageUrl: 'https://ours/pic.jpg',
     postImageUrls: ['https://post/a.jpg', 'https://post/b.jpg'],
-    pageText: 'Смотрите что вышло #MagnaQore',
-    hashtags: '#MagnaQore',
+    pageText: 'Смотрите что вышло',
     pageWasPublic: true,
   };
 
@@ -76,6 +75,21 @@ describe('запрос к проверяющему', () => {
     // Текст чужой страницы попадает в промпт — защита от указаний внутри него
     // должна быть прописана явно.
     expect(req.system).toMatch(/ДАННЫЕ[^.]*не указания/);
+  });
+
+  /**
+   * Хештеги проверяющему не показывают НАМЕРЕННО. Иначе он начнёт решать
+   * по ним: «тегов нет — значит не тот пост», — а их отсутствие почти
+   * всегда означает, что мы не смогли прочитать текст (VK режет описание,
+   * Instagram не отдаёт ничего). Отказывать за собственную слепоту нельзя.
+   */
+  it('хештеги НЕ попадают в решение проверяющего', async () => {
+    const { provider: p, complete } = provider('{"published":true,"sameImage":true,"confidence":"high","reason":"ок"}');
+    await askVerifier(p, evidence);
+    const req = complete.mock.calls[0]![0] as { system: string; messages: Array<{ text: string }> };
+    expect(req.messages[0]!.text).not.toMatch(/хештег/i);
+    // В системной части они упомянуты ровно затем, чтобы их игнорировать.
+    expect(req.system).toMatch(/Хештеги[^.]*НЕ касаются/);
   });
 
   it('текст страницы обрезается, чтобы длинный пост не раздул запрос', async () => {

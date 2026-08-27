@@ -13,6 +13,8 @@ export interface SharePageInput {
   caption?: string | null;
   /** Хештеги фестиваля одной строкой. */
   hashtags: string;
+  /** Сколько токенов даём за репост. 0 — про бонус не пишем. */
+  bonusTokens?: number | undefined;
 }
 
 /**
@@ -31,6 +33,7 @@ export function renderSharePage(input: SharePageInput): string {
   const caption = input.caption?.trim();
   const tags = input.hashtags.trim();
   const bot = input.botUrl?.trim();
+  const bonus = input.bonusTokens ?? 0;
 
   return `<!doctype html>
 <html lang="ru">
@@ -141,6 +144,17 @@ export function renderSharePage(input: SharePageInput): string {
     word-break: break-word;
   }
 
+  .bonus {
+    margin: 12px 0 0;
+    padding: 12px 14px;
+    border: 1px dashed var(--line);
+    border-radius: var(--r);
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .bonus b { color: var(--fg); font-weight: 500; }
+  .bonus a { color: var(--fg); }
+
   .qr { margin-top: 32px; display: flex; align-items: center; gap: 16px; }
   .qr-code {
     flex: none; width: 84px; height: 84px;
@@ -194,6 +208,9 @@ export function renderSharePage(input: SharePageInput): string {
   <section class="section">
     <p class="label">Хештеги для репоста</p>
     <p class="tags" id="tags">${esc(tags)}</p>
+    ${bonus > 0 ? `<p class="bonus">Выложи с ними — и пришли ссылку на пост
+      ${bot ? `<a href="${attr(bot)}">боту</a>` : 'боту'}.
+      Начислим <b>${bonus} ${tokenWord(bonus)}</b> на новые картинки.</p>` : ''}
   </section>
 
   <div class="qr">
@@ -277,6 +294,17 @@ export function renderNotFoundPage(botUrl?: string | null): string {
   </div>
 </body>
 </html>`;
+}
+
+/** Склонение «токен»: «3 токен» на витрине выглядит неряшливо. */
+function tokenWord(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return 'токенов';
+  switch (n % 10) {
+    case 1: return 'токен';
+    case 2: case 3: case 4: return 'токена';
+    default: return 'токенов';
+  }
 }
 
 /** Экранирование текста внутри HTML. Подпись пишет модель — доверять нельзя. */
