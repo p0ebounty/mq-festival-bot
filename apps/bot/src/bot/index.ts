@@ -1,4 +1,4 @@
-import { Bot, Keyboard, type Context } from 'grammy';
+import { Bot, type Context } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
 import { UserGate } from '@mq/core';
 import type { AppContext } from '../context.js';
@@ -7,6 +7,7 @@ import { handleIncoming } from '../agent/runner.js';
 import { phrases, unsupportedReply, stillThinking } from './phrases.js';
 import { prepareMessage } from './format.js';
 import { ingestPhoto } from './media.js';
+import { decodeSuggestion, suggestionKeyboard, SUGGEST_PATTERN } from './suggest-button.js';
 import { cmdStart, cmdHelp, cmdBalance, greetingText, START_CHIPS, type CommandInput, type CommandReply } from './commands.js';
 
 /**
@@ -55,10 +56,10 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
             lastName: from.last_name, languageCode: from.language_code,
           },
         });
-        await send(c, r.text, undefined, r.suggestions, r.keyboardWasShown);
+        await send(c, r.text, undefined, r.suggestions);
       } catch (err) {
         log.error({ err: String(err), tgId: from.id, command: name }, 'команда не собралась');
-        await send(c, greetingText(from.first_name, null), undefined, [...START_CHIPS], false);
+        await send(c, greetingText(from.first_name, null), undefined, [...START_CHIPS]);
       }
     });
   };
@@ -66,6 +67,27 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   command('start', (i) => cmdStart(app, i, log));
   command('help', (i) => cmdHelp(app, i, log));
   command('balance', (i) => cmdBalance(app, i, log));
+
+  /**
+   * Нажатие на кнопку-подсказку.
+   *
+   * Три действия по порядку: ответить Telegram (иначе на кнопке крутятся
+   * часики), снять кнопки с этого сообщения (подсказка использована — её
+   * место в истории, а не на экране) и дальше обычный путь сообщения.
+   *
+   * Текст берём из callback_data: он же и написан на кнопке, они
+   * специально совпадают.
+   */
+  bot.callbackQuery(SUGGEST_PATTERN, async (c) => {
+    const text = decodeSuggestion(c.callbackQuery.data);
+    // Короткая всплывашка подтверждает нажатие: своим сообщением выбор в
+    // чате не появится — inline-кнопка, в отличие от нижней панели, ничего
+    // от лица участника не отправляет.
+    await c.answerCallbackQuery(text ? { text } : undefined).catch(() => {});
+    if (!text) return;
+    await c.editMessageReplyMarkup().catch(() => {});
+    await accept(c, text, { fromCallback: true });
+  });
 
   bot.on('message:text', async (c) => {
     await accept(c, c.msg.text);
@@ -102,7 +124,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       : m.audio ? 'audio' : m.animation ? 'animation' : m.location ? 'location'
       : m.contact ? 'contact' : m.poll ? 'poll' : 'other';
     log.info({ tgId: c.from?.id, kind }, 'неподдерживаемый тип сообщения');
-    await c.reply(unsupportedReply(kind), { reply_markup: { remove_keyboard: true } }).catch(() => {});
+    await c.reply(unsupportedReply(kind)).catch(() => {});
   });
 
   bot.catch((err) => {
@@ -110,8 +132,12 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   });
 
   // Общий Context, а не сужённый под message:text — обработчиков несколько
-  // (текст, фото, голос, всё остальное), и все зовут одни и те же функции.
+  // (текст, фото, нажатие кнопки, всё остальное), и все зовут одни и те же
+  // функции.
   type Ctx = Context;
+
+  /** Откуда пришла работа: с фото, с нажатия кнопки-подсказки или просто текстом. */
+  interface Origin { photo?: boolean; fromCallback?: boolean }
 
   /**
    * Приём сообщения: сначала место в очереди, потом работа.
@@ -120,13 +146,13 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
    * человек часто дописывает мысль вторым сообщением, и потерять его хуже,
    * чем ответить на секунду позже.
    */
-  async function accept(c: Ctx, text: string, media: { photo?: boolean } = {}): Promise<void> {
+  async function accept(c: Ctx, text: string, opts: Origin = {}): Promise<void> {
     const from = c.from;
     if (!from) return;
     const key = String(from.id);
     const perHour = await app.settings.getInt('limits.perHour');
 
-    const placement = gate.submit(key, () => work(c, text, media), {
+    const placement = gate.submit(key, () => work(c, text, opts), {
       messagesPerWindow: perHour,
     });
 
@@ -136,29 +162,28 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
         : placement.reason === 'overloaded' ? phrases.overloaded()
         : phrases.queueFull();
       log.info({ tgId: from.id, reason: placement.reason }, 'сообщение отклонено заслоном');
-      await c.reply(msg, { reply_markup: { remove_keyboard: true } }).catch(() => {});
+      await c.reply(msg).catch(() => {});
       return;
     }
 
     if (placement.status === 'queued') {
       // Честно говорим, что приняли и вернёмся — но работать будем по порядку.
-      await c.reply(phrases.queued(placement.ahead), { reply_markup: { remove_keyboard: true } }).catch(() => {});
+      await c.reply(phrases.queued(placement.ahead)).catch(() => {});
     }
   }
 
   /** Одна единица работы: заглушка → агент → замена заглушки ответом. */
-  async function work(c: Ctx, text: string, media: { photo?: boolean }): Promise<void> {
+  async function work(c: Ctx, text: string, opts: Origin): Promise<void> {
     const from = c.from!;
 
     const imageUrls: string[] = [];
 
-    if (media.photo) {
+    if (opts.photo) {
       try {
         imageUrls.push(await ingestPhoto(app, c.api, c.msg?.photo ?? [], log));
       } catch (err) {
         log.warn({ err: String(err) }, 'не удалось забрать фото участника');
-        await c.reply('Фото не получилось загрузить. Пришли ещё раз, пожалуйста.',
-          { reply_markup: { remove_keyboard: true } }).catch(() => {});
+        await c.reply('Фото не получилось загрузить. Пришли ещё раз, пожалуйста.').catch(() => {});
         return;
       }
     }
@@ -169,9 +194,10 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     let placeholderId: number | undefined;
     try {
       // ⚠️ БЕЗ reply_markup. Проверено запросами к API: сообщение,
-      // отправленное с remove_keyboard, Telegram делает НЕРЕДАКТИРУЕМЫМ —
-      // editMessageText отвечает «message can't be edited». Прошлая версия
-      // цепляла снятие сюда, и ответ участнику не уходил вообще.
+      // отправленное С reply-клавиатурой или со снятием, Telegram делает
+      // НЕРЕДАКТИРУЕМЫМ — `message can't be edited`. Заглушку мы правим,
+      // значит вешать на неё такое нельзя. К inline-разметке это не
+      // относится, но заглушке и она не нужна.
       const sent = await c.reply(phrases.thinking());
       placeholderId = sent.message_id;
     } catch {
@@ -193,7 +219,9 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       reply = await handleIncoming(app, {
         tgId: BigInt(from.id),
         chatId: BigInt(c.chat!.id),
-        tgMessageId: BigInt(c.msg?.message_id ?? 0),
+        // У нажатия на кнопку c.msg — это сообщение БОТА, а не участника.
+        // Записывать его как id входящего значит врать в истории.
+        tgMessageId: opts.fromCallback ? 0n : BigInt(c.msg?.message_id ?? 0),
         text,
         ...(imageUrls.length ? { imageUrls } : {}),
         from: {
@@ -218,7 +246,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     // заглушка была отправлена раньше карточки, и правка легла бы НАД ней.
     // Участнику логичнее видеть сначала картинку-место, потом пояснение.
     await send(c, body, reply.cardSent ? undefined : placeholderId,
-      reply.suggestions, reply.keyboardWasShown, reply.cardSent ? placeholderId : undefined);
+      reply.suggestions, reply.cardSent ? placeholderId : undefined);
   }
 
   /**
@@ -227,8 +255,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
    */
   async function send(
     c: Ctx, raw: string, editId: number | undefined,
-    suggestions?: string[], keyboardWasShown = false,
-    dropMessageId?: number,
+    suggestions?: string[], dropMessageId?: number,
   ): Promise<void> {
     // Заглушка больше не нужна: текст пойдёт новым сообщением под карточкой.
     if (dropMessageId !== undefined) {
@@ -241,22 +268,11 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       : [{ text: plain, html: false }];
 
     const chatId = c.chat!.id;
-    const withKeyboard = Boolean(suggestions?.length);
 
-    // Клавиатуру можно задать только при ОТПРАВКЕ — к правке не цепляется.
-    // Значит новым сообщением отвечаем в двух случаях: ставим кнопки или
-    // снимаем висящие. В остальном правим заглушку, как и раньше.
-    const markup = withKeyboard
-      ? suggestions!.reduce((k, s) => k.text(s).row(), new Keyboard())
-          .oneTime().resized().placeholder('Или напиши своими словами…')
-      : keyboardWasShown
-        ? { remove_keyboard: true as const }
-        : undefined;
-
-    if (markup && editId !== undefined) {
-      await c.api.deleteMessage(chatId, editId).catch(() => {});
-      editId = undefined;
-    }
+    // Inline-разметку МОЖНО прицепить к правке — в отличие от нижней
+    // панели, ради которой заглушку раньше приходилось удалять и слать
+    // ответ заново. Теперь «Думаю…» превращается в ответ прямо с кнопками.
+    const markup = suggestions?.length ? suggestionKeyboard(suggestions) : undefined;
 
     for (const attempt of attempts) {
       // Сначала правка (если можно), потом — обязательно отправка новым.
@@ -264,12 +280,13 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       // живой случай 27.08, обе попытки упёрлись в «message can't be edited».
       const ways: Array<() => Promise<unknown>> = [];
       const parse = attempt.html ? { parse_mode: 'HTML' as const } : {};
+      const extra = { ...parse, ...(markup ? { reply_markup: markup } : {}) };
       if (editId !== undefined) {
-        ways.push(() => c.api.editMessageText(chatId, editId!, attempt.text, parse));
+        ways.push(() => c.api.editMessageText(chatId, editId!, attempt.text, extra));
       }
       ways.push(async () => {
         if (editId !== undefined) await c.api.deleteMessage(chatId, editId).catch(() => {});
-        return c.reply(attempt.text, { ...parse, ...(markup ? { reply_markup: markup } : {}) });
+        return c.reply(attempt.text, extra);
       });
 
       for (const way of ways) {

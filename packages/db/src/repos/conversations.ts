@@ -154,19 +154,6 @@ export function conversationsRepo(db: Db) {
   };
 }
 
-export function keyboardRepo(db: Db) {
-  return {
-    async isShown(userId: string): Promise<boolean> {
-      const [row] = await db.select({ v: users.keyboardShown })
-        .from(users).where(eq(users.id, userId)).limit(1);
-      return row?.v ?? false;
-    },
-    async setShown(userId: string, shown: boolean) {
-      await db.update(users).set({ keyboardShown: shown }).where(eq(users.id, userId));
-    },
-  };
-}
-
 export function worldsRepo(db: Db) {
   return {
     async setCurrent(userId: string, mediaId: string) {
