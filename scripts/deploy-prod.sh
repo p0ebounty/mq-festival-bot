@@ -81,13 +81,32 @@ sed -e "s/__BOT_PORT__/$BOT_PORT/" -e "s/__ADMIN_PORT__/$ADMIN_PORT/" \
 chmod 644 /docker/traefik/dynamic/mqbot-prod.yml
 
 step "ждём подъёма"
+#
 # ⚠️ Проверяем КОД ответа, а не успех curl: на 502 curl выходит с нулём,
 # и цикл проскакивал мгновенно — smoke бежал по ещё не поднятому стенду.
-for i in $(seq 1 45); do
-  code=$(curl -sS -o /dev/null -w '%{http_code}' "https://$DOMAIN/healthz" 2>/dev/null || echo 000)
-  [ "$code" = "200" ] && { printf '  поднялся за ~%s с\n' "$((i * 2))"; break; }
-  sleep 2
+#
+# ⚠️ И засчитываем только ТРИ ответа подряд. Одного мало: `systemctl restart`
+# у Type=simple возвращает управление, как только процесс порождён, а не
+# когда он начал отвечать. Первый curl успевал получить 200 от уходящего
+# процесса, цикл рапортовал «поднялся за ~2 с» и не ждал вообще — а следом
+# smoke бежал по дыре и валился на трёх проверках (живой случай 27.08).
+# Выкат, который врёт «стенд не готов», на фестивале хуже медленного.
+#
+# Стучимся и локально, и через Traefik: локальный порт ловит неподнятое
+# приложение, HTTPS — не перечитанные маршруты после записи конфига.
+ready=0
+for i in $(seq 1 60); do
+  local_code=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$BOT_PORT/healthz" 2>/dev/null || echo 000)
+  https_code=$(curl -sS -o /dev/null -w '%{http_code}' "https://$DOMAIN/healthz" 2>/dev/null || echo 000)
+  if [ "$local_code" = "200" ] && [ "$https_code" = "200" ]; then
+    ready=$((ready + 1))
+    [ "$ready" -ge 3 ] && { printf '  поднялся и держится, ~%s с\n' "$i"; break; }
+  else
+    ready=0
+  fi
+  sleep 1
 done
+[ "$ready" -ge 3 ] || die "стенд не поднялся за минуту (локально $local_code, через Traefik $https_code)"
 
 step "smoke"
 BOT_PORT="$BOT_PORT" "$PROD_DIR/scripts/smoke.sh" prod || die "smoke не прошёл — стенд не готов"
