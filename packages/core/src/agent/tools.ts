@@ -52,6 +52,12 @@ export interface ToolContext {
    * убери их, и бот останется полностью рабочим (ADR 0003).
    */
   suggest?: ((options: string[]) => void) | undefined;
+  /**
+   * Инструмент сообщает, что уже отправил участнику карточку «Рисую…».
+   * Бот по этому признаку решает, отправить свой текст НОВЫМ сообщением —
+   * чтобы оно легло ПОД карточкой, а не над ней.
+   */
+  notePlaceholderSent?: (() => void) | undefined;
   /** Логгер вызывающей стороны. */
   log: { info: (o: unknown, m?: string) => void; warn: (o: unknown, m?: string) => void };
 }

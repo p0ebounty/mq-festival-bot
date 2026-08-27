@@ -8,7 +8,7 @@ import type { AppContext } from '../context.js';
  *
  * Вызывается из обработчика callback от kie.ai, а не из цикла агента:
  * генерация идёт 40–80 секунд, столько держать диалог нельзя.
- * Поэтому агент говорит «делаю», а картинка прилетает отдельным сообщением.
+ * Поэтому агент говорит «делаю», а картинка приходит сюда.
  */
 export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger) {
   return async function deliverGeneration(generationId: string): Promise<void> {
@@ -20,14 +20,16 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       return;
     }
 
+    const chatId = Number(gen.tgChatId);
+    const cardId = gen.placeholderMessageId ? Number(gen.placeholderMessageId) : undefined;
+
     if (gen.status === 'failed' || gen.status === 'refunded') {
-      const text = 'Не получилось нарисовать — картинка не вышла. Токены вернул, попробуй сформулировать чуть иначе.';
       // Карточку «Рисую…» убираем: висящая заглушка при неудаче выглядит так,
       // будто работа всё ещё идёт.
-      if (gen.placeholderMessageId) {
-        await bot.api.deleteMessage(Number(gen.tgChatId), Number(gen.placeholderMessageId)).catch(() => {});
+      if (cardId !== undefined) {
+        await bot.api.deleteMessage(chatId, cardId).catch(() => {});
       }
-      await bot.api.sendMessage(Number(gen.tgChatId), text)
+      await bot.api.sendMessage(chatId, failureText(gen.failMessage))
         .catch((e: unknown) => log.warn({ generationId, err: String(e) }, 'не смог отправить сообщение о сбое'));
       return;
     }
@@ -40,19 +42,55 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       return;
     }
 
+    // Подпись пишет агент при постановке задачи — она про идею участника,
+    // а не казённое «Готово!». Если агент её не дал, обходимся без подписи:
+    // пустая лучше безликой.
+    const caption = gen.caption?.trim();
+
+    let buf: Buffer;
     try {
-      const buf = await app.storage.read(media.path);
-      // Шлём файлом, а не ссылкой: Telegram кэширует и показывает мгновенно,
-      // и картинка не зависит от доступности нашего домена.
-      // Подпись пишет агент при постановке задачи — она про идею участника,
-      // а не казённое «Готово!». Если агент её не дал, обходимся без подписи:
-      // пустая лучше безликой.
-      const caption = gen.caption?.trim();
-      await bot.api.sendPhoto(Number(gen.tgChatId), new InputFile(buf, 'mqbot.jpg'),
-        caption ? { caption } : {});
-      log.info({ generationId, bytes: media.bytes }, 'картинка доставлена участнику');
+      buf = await app.storage.read(media.path);
+    } catch (err) {
+      log.error({ generationId, err: String(err) }, 'файл результата не читается');
+      return;
+    }
+
+    // Основной путь: подменяем картинку ВНУТРИ карточки «Рисую…».
+    // Участник видит превращение прямо там, где ждал, без второго сообщения.
+    if (cardId !== undefined) {
+      try {
+        await bot.api.editMessageMedia(chatId, cardId,
+          InputMediaBuilder.photo(new InputFile(buf, 'mqbot.jpg'), caption ? { caption } : {}));
+        log.info({ generationId, bytes: media.bytes }, 'картинка подменена в карточке');
+        return;
+      } catch (err) {
+        // Карточку могли удалить, или сообщение слишком старое.
+        log.warn({ generationId, err: String(err).slice(0, 140) },
+          'подменить картинку в карточке не вышло, шлём отдельным сообщением');
+        await bot.api.deleteMessage(chatId, cardId).catch(() => {});
+      }
+    }
+
+    // Запасной путь: обычная отправка. Шлём файлом, а не ссылкой — Telegram
+    // кэширует и показывает мгновенно, и картинка не зависит от нашего домена.
+    try {
+      await bot.api.sendPhoto(chatId, new InputFile(buf, 'mqbot.jpg'), caption ? { caption } : {});
+      log.info({ generationId, bytes: media.bytes }, 'картинка доставлена отдельным сообщением');
     } catch (err) {
       log.error({ generationId, err: String(err) }, 'не удалось доставить картинку');
     }
   };
+}
+
+/**
+ * Текст про неудачу. Отдельно разбираем отказ по контенту: участнику важно
+ * понять, что дело в его запросе, а не в поломке бота, — иначе он будет
+ * повторять то же самое и тратить токены.
+ */
+function failureText(failMessage: string | null): string {
+  const policy = /policy|prohibited|filtered|violat/i.test(failMessage ?? '');
+  return policy
+    ? 'Эту картинку модель рисовать отказалась — так бывает с известными персонажами ' +
+      'и защищённой авторским правом натурой. Токены вернул. Давай придумаем что-нибудь своё?'
+    : 'Не получилось нарисовать — картинка не вышла. Токены вернул, попробуй сформулировать чуть иначе.';
 }
