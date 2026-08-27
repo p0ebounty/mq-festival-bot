@@ -22,8 +22,6 @@ export interface AgentReply {
   conversationId: string;
   /** Кнопки-подсказки, если агент их предложил. */
   suggestions?: string[];
-  /** Висела ли клавиатура до этого ответа — её придётся снимать. */
-  keyboardWasShown: boolean;
   /** Была ли отправлена карточка «Рисую…»: тогда текст идёт новым сообщением. */
   cardSent?: boolean;
 }
@@ -50,7 +48,7 @@ export async function handleIncoming(
   }, startBalance);
 
   if (user.isBanned) {
-    return { text: 'Доступ закрыт.', userId: user.id, conversationId: '', keyboardWasShown: false };
+    return { text: 'Доступ закрыт.', userId: user.id, conversationId: '' };
   }
 
   const historyLimit = await app.settings.getInt('agent.historyMessages');
@@ -137,7 +135,7 @@ export async function handleIncoming(
     const text = known ? err.userMessage : 'Что-то пошло не так. Попробуй ещё раз через минутку.';
     await app.conversations.addMessage({ conversationId: conversation.id, role: 'assistant', text });
     await app.conversations.touch(conversation.id);
-    return { text, userId: user.id, conversationId: conversation.id, keyboardWasShown: user.keyboardShown };
+    return { text, userId: user.id, conversationId: conversation.id };
   }
 
   // Записываем ответ ассистента и все вызовы инструментов под ним.
@@ -169,16 +167,10 @@ export async function handleIncoming(
     log.warn({ userId: user.id, iterations: result.iterations }, 'агент упёрся в лимит итераций');
   }
 
-  // Флаг обновляем здесь, а не в боте: он часть состояния участника.
-  if (suggestions.length !== 0 || user.keyboardShown) {
-    await app.keyboard.setShown(user.id, suggestions.length > 0);
-  }
-
   return {
     text: result.text,
     userId: user.id,
     conversationId: conversation.id,
-    keyboardWasShown: user.keyboardShown,
     ...(cardSent ? { cardSent } : {}),
     ...(suggestions.length ? { suggestions } : {}),
   };

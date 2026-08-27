@@ -24,18 +24,9 @@ import type { AppContext } from '../context.js';
 export interface CommandReply {
   text: string;
   suggestions: string[];
-  /** Висела ли клавиатура до этого ответа — её придётся снимать. */
-  keyboardWasShown: boolean;
 }
 
-/**
- * Общая обвязка команды: найти участника, записать вопрос и ответ в
- * историю, привести в порядок флаг клавиатуры.
- *
- * Флаг обновляется ЗДЕСЬ, а не у вызывающих: он часть состояния участника,
- * и разъехавшись однажды, он заставляет бота слать пустые снятия
- * клавиатуры и пересоздавать заглушку вместо правки.
- */
+/** Общая обвязка команды: найти участника, записать вопрос и ответ в историю. */
 async function reply(
   app: AppContext,
   msg: CommandInput,
@@ -53,7 +44,7 @@ async function reply(
   }, startBalance);
 
   if (user.isBanned) {
-    return { text: 'Доступ закрыт.', suggestions: [], keyboardWasShown: false };
+    return { text: 'Доступ закрыт.', suggestions: [] };
   }
 
   const built = await build(user);
@@ -69,14 +60,8 @@ async function reply(
   });
   await app.conversations.touch(conversation.id);
 
-  const keyboardWasShown = user.keyboardShown;
-  const wantKeyboard = suggestions.length > 0;
-  if (keyboardWasShown !== wantKeyboard) {
-    await app.keyboard.setShown(user.id, wantKeyboard);
-  }
-
   log.info({ userId: user.id, command }, 'команда отвечена заготовкой');
-  return { text: built.text, suggestions, keyboardWasShown };
+  return { text: built.text, suggestions };
 }
 
 export interface CommandInput {

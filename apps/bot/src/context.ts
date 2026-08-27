@@ -1,6 +1,6 @@
 import {
   createDb, generationsRepo, mediaRepo, conversationsRepo, usersRepo, tokensRepo,
-  worldsRepo, keyboardRepo, shareRepo, socialRepo, ledgerRepo, type Db,
+  worldsRepo, shareRepo, socialRepo, ledgerRepo, type Db,
 } from '@mq/db';
 import { SettingsService } from '@mq/config';
 import {
@@ -25,7 +25,6 @@ export interface AppContext {
   users: ReturnType<typeof usersRepo>;
   tokens: ReturnType<typeof tokensRepo>;
   worlds: ReturnType<typeof worldsRepo>;
-  keyboard: ReturnType<typeof keyboardRepo>;
   /** Короткие ссылки на результаты — цель QR-кода. */
   share: ReturnType<typeof shareRepo>;
   /** Заявки на бонус за репост — журнал постфактум, не очередь (ADR 0007). */
@@ -102,7 +101,6 @@ export function createContext(): AppContext {
     users: usersRepo(db),
     tokens: tokensRepo(db),
     worlds: worldsRepo(db),
-    keyboard: keyboardRepo(db),
     share: shareRepo(db),
     social: socialRepo(db),
     ledger: ledgerRepo(db),

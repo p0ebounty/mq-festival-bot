@@ -1,0 +1,22 @@
+{
+  "update_id": 900001,
+  "callback_query": {
+    "id": "4382abcde",
+    "from": { "id": 999000303, "is_bot": false, "first_name": "Артём", "username": "e2e_tap", "language_code": "ru" },
+    "chat_instance": "-1234567890",
+    "data": "sg:Дай готовый мир",
+    "message": {
+      "message_id": 999001,
+      "date": 1787830000,
+      "chat": { "id": 999000303, "type": "private", "first_name": "Артём" },
+      "from": { "id": 1000000002, "is_bot": true, "first_name": "MQ dev", "username": "example_dev_bot" },
+      "text": "Умею три вещи…",
+      "reply_markup": {
+        "inline_keyboard": [
+          [{ "text": "Хочу себя в профессии", "callback_data": "sg:Хочу себя в профессии" }],
+          [{ "text": "Дай готовый мир", "callback_data": "sg:Дай готовый мир" }]
+        ]
+      }
+    }
+  }
+}
