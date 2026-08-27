@@ -26,11 +26,14 @@ step "smoke живого стенда"
 ./scripts/smoke.sh dev >/dev/null 2>&1; res $? "smoke dev"
 
 step "E2E (Playwright)"
-if [ -n "${E2E_ADMIN_PASSWORD:-}" ]; then
+# Спеки сами пропускают себя, если нет их переменной: странице результата
+# нужен E2E_SHORT_ID, админке — E2E_ADMIN_PASSWORD. Гонять их надо в любом
+# случае: одна незаданная переменная не должна прятать вторую проверку.
+if [ -n "${E2E_ADMIN_PASSWORD:-}" ] || [ -n "${E2E_SHORT_ID:-}" ]; then
   ./node_modules/.bin/playwright test --reporter=line 2>&1 | tail -4
   res ${PIPESTATUS[0]:-0} "playwright"
 else
-  printf '  \033[33m⊘ пропущено: E2E_ADMIN_PASSWORD не задан\033[0m\n'
+  printf '  \033[33m⊘ пропущено: ни E2E_ADMIN_PASSWORD, ни E2E_SHORT_ID не заданы\033[0m\n'
 fi
 
 echo

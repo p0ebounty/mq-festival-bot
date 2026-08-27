@@ -1,6 +1,6 @@
 import {
   createDb, generationsRepo, mediaRepo, conversationsRepo, usersRepo, tokensRepo,
-  worldsRepo, keyboardRepo, type Db,
+  worldsRepo, keyboardRepo, shareRepo, type Db,
 } from '@mq/db';
 import { SettingsService } from '@mq/config';
 import {
@@ -26,6 +26,8 @@ export interface AppContext {
   tokens: ReturnType<typeof tokensRepo>;
   worlds: ReturnType<typeof worldsRepo>;
   keyboard: ReturnType<typeof keyboardRepo>;
+  /** Короткие ссылки на результаты — цель QR-кода. */
+  share: ReturnType<typeof shareRepo>;
   registry: ToolRegistry;
   /**
    * Досылка готовой генерации участнику. Ставится после создания бота —
@@ -85,6 +87,7 @@ export function createContext(): AppContext {
     tokens: tokensRepo(db),
     worlds: worldsRepo(db),
     keyboard: keyboardRepo(db),
+    share: shareRepo(db),
     registry: new ToolRegistry(),
     chatProvider,
   };

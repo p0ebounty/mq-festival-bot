@@ -3,6 +3,7 @@ import { env } from './env.js';
 import { createContext } from './context.js';
 import { registerKieCallback } from './routes/kie-callback.js';
 import { registerMediaRoutes } from './routes/media.js';
+import { registerShareRoutes } from './routes/share.js';
 import { registerTelegramWebhook, installWebhook } from './routes/telegram.js';
 import { startReconcileWorker } from './workers/reconcile.js';
 import { createBot } from './bot/index.js';
@@ -38,6 +39,7 @@ app.get('/healthz', async () => ({
 //   Next.js: / и /api/* (админка со своими route handlers)
 registerKieCallback(app, ctx);
 registerMediaRoutes(app, ctx);
+registerShareRoutes(app, ctx);
 
 // Набор инструментов агента: пять универсальных, без флагов-переключателей
 // и без «одна профессия — один инструмент» (ADR 0010).
