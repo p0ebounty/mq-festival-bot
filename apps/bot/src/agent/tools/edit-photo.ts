@@ -62,7 +62,9 @@ export function makeEditPhotoTool(app: AppContext): AgentTool<z.infer<typeof inp
     },
 
     async run(args, ctx) {
-      const photo = ctx.lastImageUrl;
+      // Берём последнюю картинку, а не исходное фото: правки должны
+      // накладываться друг на друга, а не откатывать предыдущую.
+      const photo = ctx.currentImageUrl ?? ctx.lastImageUrl;
       if (!photo) {
         return {
           ok: false,

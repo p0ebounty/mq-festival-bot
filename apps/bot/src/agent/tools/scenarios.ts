@@ -212,7 +212,8 @@ export function makeTransformWorldTool(app: AppContext): AgentTool<z.infer<typeo
           ok: false,
           summary: 'Мира из игры у участника нет.',
           note: hasPhoto
-            ? 'Но он присылал фото — похоже, речь про него. Возьми edit_photo.'
+            ? 'Ты ошибся инструментом. У участника есть картинка — СЕЙЧАС ЖЕ вызови ' +
+              'edit_photo с тем же change. Не отвечай ему про миры, он про них не спрашивал.'
             : 'Если он хочет поиграть в миры, выдай стартовый через get_base_world.',
           error: 'no_world',
         };

@@ -48,3 +48,27 @@ describe('системный промпт', () => {
     expect(p).toContain('НЕ ХВАТАЕТ');
   });
 });
+
+describe('состояние картинок в промпте', () => {
+  it('без мира — прямой запрет на transform_world', () => {
+    const p = buildSystemPrompt(DEFAULT_SYSTEM_PROMPT, {
+      tokenBalance: 5, costPerImage: 1, hasWorld: false, hasImage: true,
+    });
+    expect(p).toContain('Мира из игры у участника НЕТ');
+    expect(p).toContain('не вызывай ни при каких формулировках');
+  });
+
+  it('с миром — разрешение', () => {
+    const p = buildSystemPrompt(DEFAULT_SYSTEM_PROMPT, {
+      tokenBalance: 5, costPerImage: 1, hasWorld: true, hasImage: true,
+    });
+    expect(p).toContain('ЕСТЬ мир из игры');
+  });
+
+  it('без картинки — просить прислать, а не гадать', () => {
+    const p = buildSystemPrompt(DEFAULT_SYSTEM_PROMPT, {
+      tokenBalance: 5, costPerImage: 1, hasWorld: false, hasImage: false,
+    });
+    expect(p).toContain('попроси прислать фото');
+  });
+})

@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { Db } from '../index';
 import { generations, media } from '../schema';
 
@@ -121,6 +121,27 @@ export function generationsRepo(db: Db) {
           lt(generations.createdAt, new Date(Date.now() - olderThanSec * 1000)),
         ))
         .limit(limit);
+    },
+
+    /**
+     * Последняя удачная генерация участника — то, что он видел последним.
+     * Нужна для ЦЕПОЧКИ правок: «сделай день» → «добавь локомотив» должно
+     * применяться к дневной версии, а не откатываться к исходному фото.
+     */
+    async lastResult(userId: string) {
+      const [row] = await db.select({
+        mediaId: generations.outputMediaId,
+        at: generations.completedAt,
+      })
+        .from(generations)
+        .where(and(
+          eq(generations.userId, userId),
+          eq(generations.status, 'success'),
+          sql`${generations.outputMediaId} is not null`,
+        ))
+        .orderBy(desc(generations.completedAt))
+        .limit(1);
+      return row?.mediaId ? { mediaId: row.mediaId, at: row.at } : null;
     },
 
     /** Сколько задач у пользователя сейчас в работе — для лимита «одна за раз». */
