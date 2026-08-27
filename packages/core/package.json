@@ -4,8 +4,22 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
-  "exports": { ".": "./src/index.ts", "./images": "./src/images/index.ts" },
-  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
-  "dependencies": { "zod": "^3.24.1" },
-  "devDependencies": { "typescript": "^5.7.2" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./images": "./src/images/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.6",
+    "jsqr": "^1.4.0",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.7.2"
+  }
 }

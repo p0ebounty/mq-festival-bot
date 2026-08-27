@@ -1,7 +1,9 @@
-import { InputFile, InputMediaBuilder } from 'grammy';
+import { InlineKeyboard, InputFile, InputMediaBuilder } from 'grammy';
 import type { Bot } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
+import { renderQrPng, shareUrl } from '@mq/core';
 import type { AppContext } from '../context.js';
+import { env } from '../env.js';
 
 /**
  * Досылка готовой картинки участнику.
@@ -55,14 +57,24 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       return;
     }
 
+    // Короткая ссылка на публичную страницу — цель QR-кода из ТЗ.
+    // Её могло не быть, если создание упало: тогда просто отдаём картинку.
+    const link = await shortLinkFor(app, generationId, log);
+    const page = link ? shareUrl(env.PUBLIC_URL, link) : null;
+    const markup = page
+      ? new InlineKeyboard().url('Скачать и поделиться', page)
+      : undefined;
+
     // Основной путь: подменяем картинку ВНУТРИ карточки «Рисую…».
     // Участник видит превращение прямо там, где ждал, без второго сообщения.
+    let delivered = false;
     if (cardId !== undefined) {
       try {
         await bot.api.editMessageMedia(chatId, cardId,
-          InputMediaBuilder.photo(new InputFile(buf, 'mqbot.jpg'), caption ? { caption } : {}));
+          InputMediaBuilder.photo(new InputFile(buf, 'mqbot.jpg'), caption ? { caption } : {}),
+          markup ? { reply_markup: markup } : {});
         log.info({ generationId, bytes: media.bytes }, 'картинка подменена в карточке');
-        return;
+        delivered = true;
       } catch (err) {
         // Карточку могли удалить, или сообщение слишком старое.
         log.warn({ generationId, err: String(err).slice(0, 140) },
@@ -73,13 +85,63 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
 
     // Запасной путь: обычная отправка. Шлём файлом, а не ссылкой — Telegram
     // кэширует и показывает мгновенно, и картинка не зависит от нашего домена.
-    try {
-      await bot.api.sendPhoto(chatId, new InputFile(buf, 'mqbot.jpg'), caption ? { caption } : {});
-      log.info({ generationId, bytes: media.bytes }, 'картинка доставлена отдельным сообщением');
-    } catch (err) {
-      log.error({ generationId, err: String(err) }, 'не удалось доставить картинку');
+    if (!delivered) {
+      try {
+        await bot.api.sendPhoto(chatId, new InputFile(buf, 'mqbot.jpg'), {
+          ...(caption ? { caption } : {}),
+          ...(markup ? { reply_markup: markup } : {}),
+        });
+        log.info({ generationId, bytes: media.bytes }, 'картинка доставлена отдельным сообщением');
+        delivered = true;
+      } catch (err) {
+        log.error({ generationId, err: String(err) }, 'не удалось доставить картинку');
+      }
     }
+
+    if (delivered && page) await sendQrCard(app, bot, chatId, page, log);
   };
+}
+
+/** Короткий id генерации, если он есть. */
+async function shortLinkFor(
+  app: AppContext, generationId: string, log: FastifyBaseLogger,
+): Promise<string | undefined> {
+  try {
+    const row = await app.share.byGenerationId(generationId);
+    return row?.shortId;
+  } catch (err) {
+    log.warn({ generationId, err: String(err) }, 'короткая ссылка не найдена');
+    return undefined;
+  }
+}
+
+/**
+ * QR отдельным сообщением.
+ *
+ * ТЗ требует QR каждому участнику. В Telegram картинка и так под рукой,
+ * поэтому ценность кода — показать его с экрана другу и забрать готовые
+ * хештеги. Второе сообщение на каждую генерацию засоряет чат, поэтому
+ * поведение выключается настройкой `share.sendQr` без выката.
+ */
+async function sendQrCard(
+  app: AppContext, bot: Bot, chatId: number, page: string, log: FastifyBaseLogger,
+): Promise<void> {
+  if (await app.settings.get('share.sendQr') === 'off') return;
+  try {
+    const [png, hashtags] = await Promise.all([
+      renderQrPng(page),
+      app.settings.get('share.hashtags'),
+    ]);
+    const tags = hashtags.trim();
+    await bot.api.sendPhoto(chatId, new InputFile(png, 'qr.png'), {
+      caption: `Наведи камеру — откроется страница со скачиванием.\n${page}${tags ? `\n\n${tags}` : ''}`,
+      disable_notification: true,
+    });
+  } catch (err) {
+    // Не доставили QR — не беда: картинка у участника уже есть, а ссылка
+    // осталась кнопкой под ней.
+    log.warn({ err: String(err).slice(0, 140) }, 'QR-карточку отправить не вышло');
+  }
 }
 
 /**

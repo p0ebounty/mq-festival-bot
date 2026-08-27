@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { callbackTaskId, ingestRemote, parseTaskRecord, verifyWebhook, type CallbackBody } from '@mq/core';
+import {
+  callbackTaskId, ingestRemote, makeShortId, parseTaskRecord, verifyWebhook, type CallbackBody,
+} from '@mq/core';
 import type { AppContext } from '../context.js';
 import { env } from '../env.js';
 
@@ -128,6 +130,15 @@ export async function applyTaskResult(
 
   if (changed) {
     log.info({ generationId, bytes: stored.bytes, credits: rec.creditsConsumed }, 'генерация готова');
+
+    // Короткая ссылка нужна ДО доставки: в сообщение с картинкой уходит
+    // кнопка на неё, а следом — QR (ТЗ: «каждый участник получает QR-код»).
+    // Сбой здесь не должен отменять доставку самой картинки.
+    try {
+      await ctx.share.ensure(generationId, makeShortId);
+    } catch (err) {
+      log.warn({ generationId, err: String(err) }, 'короткую ссылку создать не вышло');
+    }
 
     // Изменённый мир становится текущим: участник может менять его дальше
     // цепочкой — шторм → роботы → акварель, каждый раз от предыдущего.
