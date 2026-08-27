@@ -35,6 +35,36 @@ export function usersRepo(db: Db) {
       }
       return created!;
     },
+
+    /**
+     * Запомнить сообщение, под которым висят кнопки-подсказки.
+     * `null` — кнопок нет.
+     */
+    async rememberSuggestion(userId: string, tgMessageId: bigint | null) {
+      await db.update(users).set({ suggestMessageId: tgMessageId }).where(eq(users.id, userId));
+    },
+
+    /**
+     * Забрать и сразу забыть сообщение с подсказками.
+     *
+     * В транзакции с `FOR UPDATE`, а не одним UPDATE…RETURNING: RETURNING
+     * отдаёт значение ПОСЛЕ записи, то есть всегда null, и нажатие на живую
+     * кнопку считалось бы устаревшим. Поймано сквозным тестом нажатия.
+     *
+     * Блокировка строки нужна по-настоящему: два сообщения подряд от одного
+     * участника обрабатываются параллельно, и без неё оба увидели бы один
+     * id — бот дважды полез бы править одно сообщение, а второе нажатие
+     * прошло бы как свежее.
+     */
+    async takeSuggestion(tgId: bigint): Promise<bigint | null> {
+      return db.transaction(async (tx) => {
+        const [row] = await tx.select({ id: users.suggestMessageId })
+          .from(users).where(eq(users.tgId, tgId)).limit(1).for('update');
+        if (!row?.id) return null;
+        await tx.update(users).set({ suggestMessageId: null }).where(eq(users.tgId, tgId));
+        return row.id;
+      });
+    },
   };
 }
 

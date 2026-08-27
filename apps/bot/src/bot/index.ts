@@ -8,7 +8,7 @@ import { phrases, unsupportedReply, stillThinking } from './phrases.js';
 import { prepareMessage } from './format.js';
 import { ingestPhoto } from './media.js';
 import { decodeSuggestion, suggestionKeyboard, SUGGEST_PATTERN } from './suggest-button.js';
-import { cmdStart, cmdHelp, cmdBalance, greetingText, START_CHIPS, type CommandInput, type CommandReply } from './commands.js';
+import { cmdStart, cmdHelp, cmdBalance, greetingText, type CommandInput, type CommandReply } from './commands.js';
 
 /**
  * Что уходит агенту вместо подписи, когда фото прислали молча.
@@ -46,6 +46,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     bot.command(name, async (c) => {
       const from = c.from;
       if (!from) return;
+      await dropStaleSuggestions(c);
       try {
         const r = await run({
           tgId: BigInt(from.id),
@@ -56,10 +57,13 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
             lastName: from.last_name, languageCode: from.language_code,
           },
         });
-        await send(c, r.text, undefined, r.suggestions);
+        const sent = await send(c, r.text, undefined, r.suggestions);
+        await remember(r.userId, r.suggestions, sent);
       } catch (err) {
         log.error({ err: String(err), tgId: from.id, command: name }, 'команда не собралась');
-        await send(c, greetingText(from.first_name, null), undefined, [...START_CHIPS]);
+        // Без кнопок: запомнить их всё равно негде — не отвечает та самая
+        // база. Живая кнопка, которая молчит на нажатие, хуже её отсутствия.
+        await send(c, greetingText(from.first_name, null), undefined);
       }
     });
   };
@@ -80,12 +84,38 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
    */
   bot.callbackQuery(SUGGEST_PATTERN, async (c) => {
     const text = decodeSuggestion(c.callbackQuery.data);
+    const tapped = c.callbackQuery.message?.message_id;
+
+    // Кнопки с нажатого сообщения снимаем ВСЕГДА, даже если нажали по
+    // старому: своё дело они отслужили.
+    await c.editMessageReplyMarkup().catch(() => {});
+
+    // Актуальна ли подсказка. Забираем запомненный id и сравниваем: если
+    // участник с тех пор написал что угодно, id уже обнулён, и это нажатие
+    // по устаревшей кнопке.
+    //
+    // ⚠️ Снять кнопки правкой удаётся не всегда — Telegram не даёт править
+    // сообщения старше двух суток, да и удалить его мог сам участник.
+    // Поэтому мало убрать кнопку с экрана, надо ещё и НЕ РЕАГИРОВАТЬ на
+    // неё: висящая кнопка, которая делает что-то неожиданное, хуже
+    // молчащей.
+    const current = c.from
+      ? await app.users.takeSuggestion(BigInt(c.from.id)).catch(() => null)
+      : null;
+    const fresh = text !== null && tapped !== undefined && current === BigInt(tapped);
+
+    if (!fresh) {
+      await c.answerCallbackQuery(
+        text ? { text: 'Эта подсказка уже не актуальна — просто напиши, чего хочешь' } : undefined,
+      ).catch(() => {});
+      if (text) log.info({ tgId: c.from?.id, tapped, current: String(current) }, 'нажата устаревшая подсказка');
+      return;
+    }
+
     // Короткая всплывашка подтверждает нажатие: своим сообщением выбор в
     // чате не появится — inline-кнопка, в отличие от нижней панели, ничего
     // от лица участника не отправляет.
-    await c.answerCallbackQuery(text ? { text } : undefined).catch(() => {});
-    if (!text) return;
-    await c.editMessageReplyMarkup().catch(() => {});
+    await c.answerCallbackQuery({ text }).catch(() => {});
     await accept(c, text, { fromCallback: true });
   });
 
@@ -124,6 +154,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       : m.audio ? 'audio' : m.animation ? 'animation' : m.location ? 'location'
       : m.contact ? 'contact' : m.poll ? 'poll' : 'other';
     log.info({ tgId: c.from?.id, kind }, 'неподдерживаемый тип сообщения');
+    await dropStaleSuggestions(c);
     await c.reply(unsupportedReply(kind)).catch(() => {});
   });
 
@@ -149,6 +180,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   async function accept(c: Ctx, text: string, opts: Origin = {}): Promise<void> {
     const from = c.from;
     if (!from) return;
+    await dropStaleSuggestions(c);
     const key = String(from.id);
     const perHour = await app.settings.getInt('limits.perHour');
 
@@ -170,6 +202,27 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       // Честно говорим, что приняли и вернёмся — но работать будем по порядку.
       await c.reply(phrases.queued(placement.ahead)).catch(() => {});
     }
+  }
+
+  /**
+   * Гасит кнопки-подсказки предыдущего сообщения.
+   *
+   * Зовётся на КАЖДОЕ действие участника: написал, прислал фото, нажал
+   * кнопку, отправил стикер. Подсказка предлагалась к прошлой реплике — как
+   * только человек ответил хоть чем-то, она устарела, а висящая устаревшая
+   * кнопка хуже, чем никакой: по ней жмут и получают не то, что ждали.
+   *
+   * Читаем и обнуляем одним запросом (`takeSuggestion`), поэтому два
+   * быстрых сообщения подряд не полезут править одно сообщение дважды.
+   */
+  async function dropStaleSuggestions(c: Ctx): Promise<void> {
+    const tgId = c.from?.id;
+    const chatId = c.chat?.id;
+    if (tgId === undefined || chatId === undefined) return;
+    const stale = await app.users.takeSuggestion(BigInt(tgId)).catch(() => null);
+    if (stale === null) return;
+    // Сообщения может уже не быть, кнопок на нём тоже — обе беды не наши.
+    await c.api.editMessageReplyMarkup(chatId, Number(stale)).catch(() => {});
   }
 
   /** Одна единица работы: заглушка → агент → замена заглушки ответом. */
@@ -245,18 +298,34 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     // Если ушла карточка «Рисую…», свой текст отправляем НОВЫМ сообщением:
     // заглушка была отправлена раньше карточки, и правка легла бы НАД ней.
     // Участнику логичнее видеть сначала картинку-место, потом пояснение.
-    await send(c, body, reply.cardSent ? undefined : placeholderId,
+    const sent = await send(c, body, reply.cardSent ? undefined : placeholderId,
       reply.suggestions, reply.cardSent ? placeholderId : undefined);
+    await remember(reply.userId, reply.suggestions, sent);
+  }
+
+  /**
+   * Запоминает, под каким сообщением остались кнопки, — чтобы погасить их
+   * на следующем же действии участника.
+   */
+  async function remember(
+    userId: string, suggestions: string[] | undefined, messageId: number | undefined,
+  ): Promise<void> {
+    if (!userId || !suggestions?.length || messageId === undefined) return;
+    await app.users.rememberSuggestion(userId, BigInt(messageId)).catch((err: unknown) => {
+      log.warn({ err: String(err).slice(0, 140) }, 'не записал сообщение с подсказками');
+    });
   }
 
   /**
    * Отправка с форматированием. Если Telegram отверг HTML — шлём простым
    * текстом: потерять оформление не страшно, потерять сообщение страшно.
+   *
+   * Возвращает id сообщения, на котором в итоге оказалась разметка.
    */
   async function send(
     c: Ctx, raw: string, editId: number | undefined,
     suggestions?: string[], dropMessageId?: number,
-  ): Promise<void> {
+  ): Promise<number | undefined> {
     // Заглушка больше не нужна: текст пойдёт новым сообщением под карточкой.
     if (dropMessageId !== undefined) {
       await c.api.deleteMessage(c.chat!.id, dropMessageId).catch(() => {});
@@ -278,21 +347,24 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       // Сначала правка (если можно), потом — обязательно отправка новым.
       // Без второго шага участник при сбое правки не получал НИЧЕГО:
       // живой случай 27.08, обе попытки упёрлись в «message can't be edited».
-      const ways: Array<() => Promise<unknown>> = [];
+      const ways: Array<() => Promise<number | undefined>> = [];
       const parse = attempt.html ? { parse_mode: 'HTML' as const } : {};
       const extra = { ...parse, ...(markup ? { reply_markup: markup } : {}) };
       if (editId !== undefined) {
-        ways.push(() => c.api.editMessageText(chatId, editId!, attempt.text, extra));
+        ways.push(async () => {
+          await c.api.editMessageText(chatId, editId!, attempt.text, extra);
+          return editId;
+        });
       }
       ways.push(async () => {
         if (editId !== undefined) await c.api.deleteMessage(chatId, editId).catch(() => {});
-        return c.reply(attempt.text, extra);
+        const sent = await c.reply(attempt.text, extra);
+        return sent.message_id;
       });
 
       for (const way of ways) {
         try {
-          await way();
-          return;
+          return await way();
         } catch (err) {
           log.warn({ html: attempt.html, err: String(err).slice(0, 140) },
             'отправка не прошла, пробуем следующий способ');
@@ -300,6 +372,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       }
     }
     log.error({ chatId: c.chat?.id }, 'не удалось отправить ответ ни одним способом');
+    return undefined;
   }
 
   return { bot, gate };
