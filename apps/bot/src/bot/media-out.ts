@@ -1,7 +1,36 @@
 import { InputFile } from 'grammy';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Bot } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppContext } from '../context.js';
+
+// В ESM нет __dirname — путь считаем от URL модуля.
+const ASSETS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets');
+
+/**
+ * Карточка «Рисую…» — уходит сразу при постановке задачи.
+ * Файл читаем один раз и держим в памяти: за смену фестиваля он уйдёт
+ * сотни раз, перечитывать диск каждый раз незачем.
+ */
+let loadingCard: Buffer | null = null;
+
+export function makePlaceholderSender(bot: Bot, log: FastifyBaseLogger) {
+  return async function sendPlaceholderCard(chatId: bigint, caption: string): Promise<bigint | null> {
+    try {
+      loadingCard ??= await readFile(path.join(ASSETS, 'loading.png'));
+      const msg = await bot.api.sendPhoto(Number(chatId), new InputFile(loadingCard, 'loading.png'), {
+        caption,
+      });
+      return BigInt(msg.message_id);
+    } catch (err) {
+      // Не смогли — не беда: картинка просто придёт отдельным сообщением.
+      log.warn({ err: String(err) }, 'карточка «Рисую…» не отправилась');
+      return null;
+    }
+  };
+}
 
 /** Отправка сохранённой у нас картинки участнику (базовый мир и т.п.). */
 export function makeMediaSender(app: AppContext, bot: Bot, log: FastifyBaseLogger) {

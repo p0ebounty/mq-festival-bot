@@ -26,6 +26,7 @@ export function makeGetBalanceTool(app: AppContext): AgentTool<Record<string, ne
         summary:
           `У участника ${balance} токен(ов). Генерация стоит ${cost}. ` +
           `За репост готовой картинки в соцсеть даётся ещё ${bonus}.`,
+        note: 'Скажи коротко, без перечисления всех цифр подряд.',
         data: { balance, cost_per_image: cost, social_bonus: bonus },
       };
     },

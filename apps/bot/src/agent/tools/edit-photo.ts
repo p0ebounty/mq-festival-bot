@@ -66,9 +66,8 @@ export function makeEditPhotoTool(app: AppContext): AgentTool<z.infer<typeof inp
       if (!photo) {
         return {
           ok: false,
-          summary:
-            'Фото участника в этом диалоге нет. Либо попроси прислать картинку, ' +
-            'либо нарисуй с нуля через generate_image.',
+          summary: 'Фото участника в этом диалоге нет.',
+          note: 'Либо попроси прислать картинку, либо нарисуй с нуля через generate_image.',
           error: 'no_photo',
         };
       }

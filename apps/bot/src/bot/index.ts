@@ -17,6 +17,17 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   const bot = new Bot(env.TELEGRAM_BOT_TOKEN);
   const gate = new UserGate();
 
+  /**
+   * Где сейчас висит клавиатура подсказок.
+   *
+   * Клавиатура в Telegram глобальная для чата и остаётся, пока её явно не
+   * убрали: `one_time_keyboard` только сворачивает её, но не удаляет.
+   * Живой случай: участник видел устаревшие подсказки под всеми следующими
+   * сообщениями. Поэтому помним, где она стоит, и снимаем при первом же
+   * ответе без подсказок.
+   */
+  const keyboardShown = new Set<number>();
+
   // Раз в 10 минут подчищаем счётчики, чтобы карта не росла всю смену.
   const sweeper = setInterval(() => gate.sweep(), 10 * 60_000);
   sweeper.unref?.();
@@ -196,32 +207,38 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
       ? [{ text: html, html: true }, { text: plain, html: false }]
       : [{ text: plain, html: false }];
 
-    // Кнопки нельзя приклеить к редактируемому сообщению обычной клавиатурой:
-    // reply-клавиатура живёт у поля ввода, а не у сообщения. Поэтому при
-    // наличии подсказок отправляем НОВОЕ сообщение, а заглушку удаляем.
+    const chatId = c.chat!.id;
     const withKeyboard = Boolean(suggestions?.length);
-    const keyboard = withKeyboard
+    // Снимать клавиатуру нужно, только если она действительно висит:
+    // лишний remove_keyboard на каждое сообщение — пустая работа.
+    const mustRemove = !withKeyboard && keyboardShown.has(chatId);
+
+    const markup = withKeyboard
       ? suggestions!.reduce((k, s) => k.text(s).row(), new Keyboard())
           .oneTime().resized().placeholder('Или напиши своими словами…')
-      : undefined;
+      : mustRemove
+        ? { remove_keyboard: true as const }
+        : undefined;
 
-    if (withKeyboard && editId !== undefined) {
-      await c.api.deleteMessage(c.chat!.id, editId).catch(() => {});
+    // Клавиатуру нельзя приклеить к отредактированному сообщению — она живёт
+    // у поля ввода. Поэтому когда она нужна (или её надо снять), отправляем
+    // новое сообщение и удаляем заглушку. В обычном случае — просто правим
+    // заглушку, как и было: в чате не остаётся мусора вроде «Думаю…».
+    if (markup && editId !== undefined) {
+      await c.api.deleteMessage(chatId, editId).catch(() => {});
       editId = undefined;
     }
 
     for (const attempt of attempts) {
       try {
-        const opts = {
-          ...(attempt.html ? { parse_mode: 'HTML' as const } : {}),
-          ...(keyboard ? { reply_markup: keyboard } : {}),
-        };
+        const parse = attempt.html ? { parse_mode: 'HTML' as const } : {};
         if (editId !== undefined) {
-          await c.api.editMessageText(c.chat!.id, editId, attempt.text,
-            attempt.html ? { parse_mode: 'HTML' } : {});
+          await c.api.editMessageText(chatId, editId, attempt.text, parse);
         } else {
-          await c.reply(attempt.text, opts);
+          await c.reply(attempt.text, { ...parse, ...(markup ? { reply_markup: markup } : {}) });
         }
+        if (withKeyboard) keyboardShown.add(chatId);
+        else keyboardShown.delete(chatId);
         return;
       } catch (err) {
         log.warn({ html: attempt.html, err: String(err).slice(0, 160) }, 'отправка не прошла, пробуем проще');

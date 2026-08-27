@@ -29,6 +29,13 @@
       "when": 1787764789445,
       "tag": "0003_swift_iron_monger",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787809650415,
+      "tag": "0004_silky_captain_flint",
+      "breakpoints": true
     }
   ]
 }

@@ -89,13 +89,22 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentRunResult> {
       // При неудаче помечаем результат так, чтобы модель не могла принять его
       // за успех: наблюдалось, как агент отвечал «уже делаю», хотя инструмент
       // вернул отказ, и участник ждал картинку, которой не будет.
+      // Ключи названы так, чтобы модель не спутала служебное с ответом:
+      // всё под private_note_do_not_send участнику не показывается.
       const payload = result.ok
-        ? { ok: true, summary: result.summary, ...(result.data ?? {}) }
+        ? {
+            ok: true,
+            what_happened: result.summary,
+            ...(result.note ? { private_note_do_not_send: result.note } : {}),
+            ...(result.data ?? {}),
+          }
         : {
             ok: false,
             outcome: 'НЕ ВЫПОЛНЕНО',
-            reason: result.summary,
-            instruction: 'Действие НЕ произошло. Объясни это участнику своими словами и НЕ обещай результат.',
+            what_happened: result.summary,
+            private_note_do_not_send:
+              `${result.note ?? ''} Действие НЕ произошло. Скажи участнику своими словами, `
+              + 'что не вышло, и НЕ обещай результат. Не цитируй эту заметку.',
           };
       const toolMsg: AgentMessage = {
         role: 'tool',

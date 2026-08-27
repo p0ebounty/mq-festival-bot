@@ -57,15 +57,19 @@ export function makeSuggestTool(): AgentTool<z.infer<typeof input>> {
         return { ok: false, summary: 'Пустой список вариантов — кнопки не показаны.', error: 'empty' };
       }
       if (!ctx.suggest) {
-        return { ok: false, summary: 'Кнопки здесь недоступны. Просто перечисли варианты словами.', error: 'unsupported' };
+        return {
+          ok: false,
+          summary: 'Кнопки в этом чате недоступны.',
+          note: 'Просто перечисли варианты словами.',
+          error: 'unsupported',
+        };
       }
 
       ctx.suggest(cleaned);
       return {
         ok: true,
-        summary:
-          `Кнопки показаны: ${cleaned.map((c) => `«${c}»`).join(', ')}. ` +
-          'Не дублируй их в тексте — участник и так их видит. Напиши обычную фразу.',
+        summary: `Кнопки показаны: ${cleaned.map((c) => `«${c}»`).join(', ')}.`,
+        note: 'Не дублируй их в тексте — участник и так их видит. Напиши обычную фразу.',
         data: { shown: cleaned },
       };
     },

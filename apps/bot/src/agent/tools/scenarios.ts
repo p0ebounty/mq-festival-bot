@@ -23,10 +23,10 @@ export function makeListProfessionsTool(app: AppContext): AgentTool<Record<strin
         .where(eq(professions.isActive, true)).orderBy(professions.sortOrder);
       return {
         ok: true,
-        summary:
-          `Доступны профессии: ${rows.map((r) => r.title).join(', ')}. ` +
-          'Назови участнику несколько ярких живой фразой, а не списком в 12 строк, ' +
-          'и скажи, что можно попросить вообще любую другую.',
+        summary: `Доступны профессии: ${rows.map((r) => r.title).join(', ')}.`,
+        note:
+          'Назови несколько ярких живой фразой, а не списком в 12 строк, ' +
+          'и упомяни, что можно попросить вообще любую другую.',
         data: { professions: rows.map((r) => ({ slug: r.slug, title: r.title, about: r.description })) },
       };
     },
@@ -78,7 +78,8 @@ export function makeRestylePhotoTool(app: AppContext): AgentTool<z.infer<typeof 
       if (!photo) {
         return {
           ok: false,
-          summary: 'Фото участника в этом диалоге нет. Попроси прислать селфи — без него профессию не сделать.',
+          summary: 'Фото участника в этом диалоге нет.',
+          note: 'Попроси прислать селфи — без него профессию не сделать.',
           error: 'no_photo',
         };
       }
@@ -132,7 +133,8 @@ export function makeGetBaseWorldTool(app: AppContext): AgentTool<Record<string, 
       if (!world) {
         return {
           ok: false,
-          summary: 'Пул базовых миров пуст — администратор их ещё не залил. Предложи обычную генерацию картинки.',
+          summary: 'Пул базовых миров пуст.',
+          note: 'Предложи участнику обычную генерацию картинки.',
           error: 'no_worlds',
         };
       }
@@ -150,10 +152,10 @@ export function makeGetBaseWorldTool(app: AppContext): AgentTool<Record<string, 
 
       return {
         ok: true,
-        summary:
-          `Выдал участнику мир «${world.title}» — картинка уже ушла отдельным сообщением. ` +
-          'Объясни правила: этот мир можно изменить ОДНОЙ фразой — погоду, стиль, ' +
-          'архитектуру, жителей. Дай одну-две идеи для затравки, не перечисляй всё подряд.',
+        summary: `Участнику выдан мир «${world.title}», картинка уже ушла ему отдельным сообщением.`,
+        note:
+          'Объясни правила: этот мир меняется ОДНОЙ фразой — погода, стиль, ' +
+          'архитектура, жители. Дай одну-две идеи для затравки, не перечисляй всё подряд.',
         data: { world_title: world.title },
       };
     },
@@ -169,8 +171,11 @@ export function makeTransformWorldTool(app: AppContext): AgentTool<z.infer<typeo
   return {
     name: 'transform_world',
     description:
-      'Изменить мир участника одной фразой — погоду, стиль, архитектуру, жителей. ' +
-      'Вызывай, когда у участника уже есть мир и он просит его изменить. ' +
+      'Изменить МИР ИЗ ИГРЫ — тот, что выдал get_base_world. Погоду, стиль, ' +
+      'архитектуру, жителей. ' +
+      '⚠️ Это НЕ про фотографии участника. Если он прислал свой снимок и просит его ' +
+      'изменить (в том числе «перекрась», «сделай ночью») — нужен edit_photo, а не этот. ' +
+      'Вызывай только когда мир из игры уже выдан и участник просит изменить именно его. ' +
       'change — что именно поменять, ПО-АНГЛИЙСКИ и дословно по мысли участника. ' +
       'Сказал «шторм и чтобы рыцари стали роботами» — передай оба изменения. ' +
       'Ничего не добавляй от себя: меняется ровно то, что попросили. ' +
@@ -200,9 +205,15 @@ export function makeTransformWorldTool(app: AppContext): AgentTool<z.infer<typeo
     async run(args, ctx) {
       const mediaId = await app.worlds.getCurrent(ctx.userId);
       if (!mediaId) {
+        // Частая путаница: участник прислал фото и просит его изменить, а
+        // агент лезет в миры. Подсказываем правильный инструмент прямо здесь.
+        const hasPhoto = Boolean(ctx.lastImageUrl);
         return {
           ok: false,
-          summary: 'У участника ещё нет мира. Вызови get_base_world — он выдаст стартовый.',
+          summary: 'Мира из игры у участника нет.',
+          note: hasPhoto
+            ? 'Но он присылал фото — похоже, речь про него. Возьми edit_photo.'
+            : 'Если он хочет поиграть в миры, выдай стартовый через get_base_world.',
           error: 'no_world',
         };
       }
