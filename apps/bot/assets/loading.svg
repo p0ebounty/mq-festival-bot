@@ -28,10 +28,11 @@
     <circle cx="360" cy="300" r="1.5"/><circle cx="700" cy="330" r="1.5"/>
   </g>
 
-  <!-- кольцо: незамкнутая дуга читается как «идёт работа» -->
-  <circle cx="512" cy="470" r="132" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="14"/>
-  <path d="M 512 338 A 132 132 0 0 1 632 402"
-        fill="none" stroke="url(#ring)" stroke-width="14" stroke-linecap="round"/>
+  <!-- Ровное кольцо без дуги. Дуга тут была, но на СТАТИЧНОЙ картинке она
+       читается как зависший индикатор прогресса: он не крутится, и кажется,
+       что всё сломалось. Спокойное кольцо такого впечатления не создаёт. -->
+  <circle cx="512" cy="470" r="132" fill="none" stroke="url(#ring)"
+          stroke-opacity="0.55" stroke-width="10"/>
 
   <!-- рамка кадра внутри кольца: намёк на будущую картинку -->
   <g stroke="#ffffff" stroke-opacity="0.55" stroke-width="7" stroke-linecap="round" fill="none">
