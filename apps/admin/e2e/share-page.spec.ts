@@ -35,7 +35,7 @@ test.describe('страница результата по QR', () => {
     await expect.poll(() => shot.evaluate((el: HTMLImageElement) => el.naturalWidth))
       .toBeGreaterThan(0);
 
-    await expect(page.getByRole('link', { name: 'Скачать картинку' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Скачать' })).toBeVisible();
     await expect(page.locator('#tags')).not.toBeEmpty();
     await expect(page.locator('.qr svg')).toBeVisible();
     expect(errors).toEqual([]);
@@ -74,7 +74,7 @@ test.describe('страница результата по QR', () => {
     });
     await page.goto(url());
     await page.getByRole('button', { name: 'Скопировать хештеги' }).click();
-    await expect(page.locator('#toast')).toHaveClass(/on/);
+    await expect(page.locator('#toast')).toHaveAttribute('data-on', '');
     expect(await page.evaluate(() => (window as unknown as { __native?: string }).__native))
       .toBeUndefined();
     expect(nativeCalled).toEqual([]);
@@ -84,7 +84,7 @@ test.describe('страница результата по QR', () => {
     await page.goto(url());
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByRole('link', { name: 'Скачать картинку' }).click(),
+      page.getByRole('link', { name: 'Скачать' }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/^mqbot-.+\.(jpg|png)$/);
   });

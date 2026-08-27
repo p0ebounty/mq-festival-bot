@@ -115,6 +115,32 @@ describe('страница результата', () => {
   });
 
   /**
+   * Подвал раньше вёл на саму же страницу — бесполезная ссылка на то, что
+   * уже открыто. Теперь он ведёт к боту: это единственный выход дальше.
+   */
+  it('подвал ведёт на бота, а не сам на себя', () => {
+    const html = renderSharePage({ ...base, botUrl: 'https://t.me/example_dev_bot' });
+    expect(html).toContain('href="https://t.me/example_dev_bot"');
+    // Ссылки на собственный адрес в подвале быть не должно.
+    expect(html).not.toContain(`<a href="${base.pageUrl}"`);
+  });
+
+  it('без ссылки на бота подвал не ломается', () => {
+    const html = renderSharePage(base);
+    expect(html).toContain('Сделано на фестивале');
+    expect(html).not.toContain('<a href="">');
+  });
+
+  it('палитра совпадает с админкой и не требует свежего браузера', () => {
+    // Админка на нейтральной шкале shadcn. Здесь те же цвета в hex:
+    // oklch не понимают браузеры старше Chrome 111 / Safari 15.4.
+    const html = renderSharePage(base);
+    expect(html).toContain('#0a0a0a');
+    expect(html).toContain('#fafafa');
+    expect(html).not.toContain('oklch(');
+  });
+
+  /**
    * Подпись пишет модель, а её текст задаёт участник. Без экранирования
    * достаточно попросить бота «подпиши картинку тегом script».
    */

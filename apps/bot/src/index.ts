@@ -8,6 +8,7 @@ import { registerTelegramWebhook, installWebhook } from './routes/telegram.js';
 import { startReconcileWorker } from './workers/reconcile.js';
 import { createBot } from './bot/index.js';
 import { makeDeliverer } from './bot/deliver.js';
+import { registerShareButton } from './bot/share-button.js';
 import { makeGetBalanceTool } from './agent/tools/get-balance.js';
 import { makeGenerateImageTool } from './agent/tools/generate-image.js';
 import { makeEditImageTool } from './agent/tools/edit-image.js';
@@ -55,6 +56,9 @@ ctx.deliverGeneration = makeDeliverer(ctx, bot, app.log);
 ctx.sendMedia = makeMediaSender(ctx, bot, app.log);
 ctx.uploadStoredMedia = makeMediaUploader(ctx, app.log);
 ctx.sendPlaceholderCard = makePlaceholderSender(bot, app.log);
+// Кнопка «Скачать и поделиться» под карточкой генерации: QR уходит
+// по нажатию, а не автоматически на каждую картинку.
+registerShareButton(ctx, bot, app.log);
 registerTelegramWebhook(app, bot);
 
 const reconciler = startReconcileWorker(ctx, app.log);
@@ -70,6 +74,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 try {
   await app.listen({ port: env.PORT, host: '127.0.0.1' });
   await bot.init();
+  if (bot.botInfo.username) ctx.botUrl = `https://t.me/${bot.botInfo.username}`;
   await installWebhook(bot, app.log);
 } catch (err) {
   app.log.error(err);

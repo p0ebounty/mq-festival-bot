@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { Bot } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppContext } from '../context.js';
+import { shareButton } from './share-button.js';
 
 // В ESM нет __dirname — путь считаем от URL модуля.
 const ASSETS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets');
@@ -17,11 +18,16 @@ const ASSETS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..
 let loadingCard: Buffer | null = null;
 
 export function makePlaceholderSender(bot: Bot, log: FastifyBaseLogger) {
-  return async function sendPlaceholderCard(chatId: bigint, caption: string): Promise<bigint | null> {
+  return async function sendPlaceholderCard(
+    chatId: bigint, caption: string, generationId: string,
+  ): Promise<bigint | null> {
     try {
       loadingCard ??= await readFile(path.join(ASSETS, 'loading.png'));
       const msg = await bot.api.sendPhoto(Number(chatId), new InputFile(loadingCard, 'loading.png'), {
         caption,
+        // Кнопка появляется сразу, но недоступной: участник видит, что
+        // действие будет, и не ищет её потом глазами.
+        reply_markup: shareButton(generationId, false),
       });
       return BigInt(msg.message_id);
     } catch (err) {

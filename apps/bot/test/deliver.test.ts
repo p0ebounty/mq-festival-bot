@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import type { AppContext } from '../src/context.js';
+import { shareButton } from '../src/bot/share-button.js';
 
 /**
  * Доставка результата — место, где чаще всего вылезали видимые участнику
  * баги: висящая заглушка, молчание после сбоя, потерянное сообщение.
- * Фаза 7 добавила сюда кнопку на страницу результата и QR-карточку.
+ * Фаза 7 добавила сюда кнопку «Скачать и поделиться»: она стоит уже на
+ * заглушке и оживает, когда картинка готова.
  *
  * Переменные окружения ставим ДО импорта: `env.ts` валидирует их на входе
  * и падает, а на чистой машине `.env.dev` может и не быть.
@@ -24,12 +26,7 @@ beforeAll(() => {
 
 interface Sent { method: string; args: unknown[] }
 
-function harness(opts: {
-  shortId?: string | null;
-  sendQr?: string;
-  status?: string;
-  editFails?: boolean;
-} = {}) {
+function harness(opts: { status?: string; editFails?: boolean } = {}) {
   const sent: Sent[] = [];
   const rec = (method: string) => (...args: unknown[]) => {
     sent.push({ method, args });
@@ -51,16 +48,8 @@ function harness(opts: {
     },
     media: { byId: async () => ({ id: 'm1', path: 'p.jpg', bytes: 10 }) },
     storage: { read: async () => Buffer.from('picture-bytes') },
-    share: {
-      byGenerationId: async () =>
-        opts.shortId === null ? undefined : { shortId: opts.shortId ?? 'abcd2345' },
-    },
-    settings: {
-      get: async (k: string) =>
-        k === 'share.sendQr' ? (opts.sendQr ?? 'on')
-        : k === 'share.hashtags' ? '#ЦентрЛидер #MagnaQore'
-        : '',
-    },
+    share: { byGenerationId: async () => ({ shortId: 'abcd2345' }) },
+    settings: { get: async () => '#ЦентрЛидер #MagnaQore' },
   } as unknown as AppContext;
 
   const bot = {
@@ -89,46 +78,40 @@ function markupOf(call: Sent): Record<string, unknown> | undefined {
 }
 
 describe('доставка результата', () => {
-  it('под картинкой стоит кнопка на публичную страницу', async () => {
+  it('кнопка под картинкой становится РАБОЧЕЙ — без знака запрета', () => {
+    // На заглушке она стояла со знаком запрета; готовность снимает его.
+    expect(JSON.stringify(shareButton('g1', false))).toContain('🚫');
+    expect(JSON.stringify(shareButton('g1', true))).not.toContain('🚫');
+  });
+
+  it('кнопка вызывает бота, а не открывает ссылку', () => {
+    // Раньше это была url-кнопка. Теперь нажатие присылает QR-карточку,
+    // поэтому нужен callback_data, а не адрес.
+    const json = JSON.stringify(shareButton('g1', true));
+    expect(json).toContain('callback_data');
+    expect(json).toContain('share:g1');
+    expect(json).not.toContain('"url"');
+  });
+
+  it('под готовой картинкой стоит кнопка', async () => {
     const h = harness();
     await (await load())(h.app, h.bot as never, h.log as never)('g1');
 
     const edit = h.sent.find((s) => s.method === 'editMessageMedia');
     expect(edit).toBeDefined();
-    expect(JSON.stringify(markupOf(edit!)))
-      .toContain('https://bot-dev.example.com/g/abcd2345');
+    const json = JSON.stringify(markupOf(edit!));
+    expect(json).toContain('share:g1');
+    expect(json).not.toContain('🚫');
   });
 
-  it('следом уходит QR-карточка со ссылкой и хештегами', async () => {
+  it('QR-карточка САМА не отправляется — только по нажатию', async () => {
+    // Второе сообщение на каждую генерацию засоряло чат: живая жалоба 27.08.
     const h = harness();
     await (await load())(h.app, h.bot as never, h.log as never)('g1');
-
-    const qr = h.sent.find((s) => s.method === 'sendPhoto');
-    expect(qr).toBeDefined();
-    const caption = String((qr!.args[2] as { caption?: string }).caption);
-    expect(caption).toContain('/g/abcd2345');
-    expect(caption).toContain('#ЦентрЛидер');
-  });
-
-  it('настройка share.sendQr=off убирает второе сообщение', async () => {
-    // Второе сообщение на каждую генерацию засоряет чат — владелец должен
-    // уметь выключить его без выката.
-    const h = harness({ sendQr: 'off' });
-    await (await load())(h.app, h.bot as never, h.log as never)('g1');
-    expect(h.sent.some((s) => s.method === 'sendPhoto')).toBe(false);
-    expect(h.sent.some((s) => s.method === 'editMessageMedia')).toBe(true);
-  });
-
-  it('без короткой ссылки картинка всё равно доходит — просто без кнопки', async () => {
-    const h = harness({ shortId: null });
-    await (await load())(h.app, h.bot as never, h.log as never)('g1');
-    const edit = h.sent.find((s) => s.method === 'editMessageMedia');
-    expect(edit).toBeDefined();
-    expect(markupOf(edit!)).toBeUndefined();
     expect(h.sent.some((s) => s.method === 'sendPhoto')).toBe(false);
   });
 
-  it('если подмена в карточке не удалась — шлём новым сообщением с кнопкой', async () => {
+  it('если подмена в карточке не удалась — новое сообщение с той же кнопкой', async () => {
     // Живой случай 27.08: правка упиралась в «message can't be edited»,
     // и участник не получал НИЧЕГО.
     const h = harness({ editFails: true });
@@ -136,11 +119,11 @@ describe('доставка результата', () => {
 
     expect(h.sent.some((s) => s.method === 'deleteMessage')).toBe(true);
     const photos = h.sent.filter((s) => s.method === 'sendPhoto');
-    expect(photos.length).toBe(2);                     // картинка + QR
-    expect(JSON.stringify(markupOf(photos[0]!))).toContain('/g/abcd2345');
+    expect(photos.length).toBe(1);
+    expect(JSON.stringify(markupOf(photos[0]!))).toContain('share:g1');
   });
 
-  it('при неудаче генерации заглушка убирается, а QR не шлётся', async () => {
+  it('при неудаче генерации заглушка убирается, картинка не шлётся', async () => {
     const h = harness({ status: 'failed' });
     await (await load())(h.app, h.bot as never, h.log as never)('g1');
     expect(h.sent.some((s) => s.method === 'deleteMessage')).toBe(true);
