@@ -13,7 +13,10 @@ const at = (min: number) => new Date(T0.getTime() + min * 60_000);
 
 function fakeApp(parts: {
   photos?: Array<{ url: string; at: Date }>;
-  gens?: Array<{ mediaId: string; caption: string | null; userPrompt: string; at: Date | null }>;
+  gens?: Array<{
+    mediaId: string; caption: string | null; userPrompt: string;
+    kind?: 'image' | 'world' | 'profession'; at: Date | null;
+  }>;
   world?: { mediaId: string; at: Date | null } | null;
   upload?: (id: string) => Promise<string | null>;
 }): AppContext {
@@ -93,6 +96,43 @@ describe('сборка реестра картинок', () => {
 
   it('пустой диалог даёт пустой реестр, а не падение', async () => {
     expect(await collect(fakeApp({}))).toEqual([]);
+  });
+
+  /**
+   * Мир из игры надо отличать от обычной картинки: правка мира двигает
+   * `users.current_world_media_id`, правка присланного фото — нет.
+   * Живой случай 27.08: участник поправил фото башни, и его город на
+   * облаках молча перестал быть его миром.
+   */
+  describe('признак «это мир из игры»', () => {
+    it('вся цепочка мира помечена, обычные правки — нет', async () => {
+      const images = await collect(fakeApp({
+        photos: [{ url: 'https://p/tower.jpg', at: at(1) }],
+        gens: [
+          { mediaId: 'm-city', caption: 'город с макаронами', userPrompt: 'x', kind: 'world', at: at(2) },
+          { mediaId: 'm-day', caption: 'дневная башня', userPrompt: 'x', kind: 'image', at: at(3) },
+        ],
+      }));
+      expect(images[0]!.isWorld).toBeUndefined();   // присланное фото
+      expect(images[1]!.isWorld).toBe(true);        // мир
+      expect(images[2]!.isWorld).toBeUndefined();   // правка фото
+    });
+
+    it('признак переживает схлопывание дубля', async () => {
+      // Текущий мир и результат генерации — одна и та же картинка. Дубль
+      // выбрасывается, но пометка обязана остаться на выжившей записи.
+      const images = await collect(fakeApp({
+        gens: [{ mediaId: 'm1', caption: 'мир', userPrompt: 'x', kind: 'world', at: at(2) }],
+        world: { mediaId: 'm1', at: at(3) },
+      }));
+      expect(images).toHaveLength(1);
+      expect(images[0]!.isWorld).toBe(true);
+    });
+
+    it('мир, выданный до диалога, тоже помечен', async () => {
+      const images = await collect(fakeApp({ world: { mediaId: 'm-castle', at: null } }));
+      expect(images[0]!.isWorld).toBe(true);
+    });
   });
 });
 
