@@ -27,7 +27,7 @@ export function registerShareRoutes(app: FastifyInstance, ctx: AppContext): void
   app.get<P>('/g/:shortId', async (req, reply) => {
     const row = await lookup(req.params.shortId);
     if (!row) {
-      return reply.code(404).type('text/html; charset=utf-8').send(renderNotFoundPage());
+      return reply.code(404).type('text/html; charset=utf-8').send(renderNotFoundPage(ctx.botUrl));
     }
 
     const url = shareUrl(env.PUBLIC_URL, row.shortId);
@@ -50,6 +50,7 @@ export function registerShareRoutes(app: FastifyInstance, ctx: AppContext): void
         downloadUrl: `${url}/download`,
         qrSvg,
         pageUrl: url,
+        botUrl: ctx.botUrl,
         caption: row.caption,
         hashtags,
       }));

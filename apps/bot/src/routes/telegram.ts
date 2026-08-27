@@ -19,7 +19,17 @@ export function registerTelegramWebhook(app: FastifyInstance, bot: Bot): void {
       req.log.warn({ ip: req.ip }, 'вебхук: неверный секретный заголовок');
       return reply.code(401).send({ ok: false });
     }
-    return handle(req, reply);
+    try {
+      return await handle(req, reply);
+    } catch (err) {
+      // Ошибку НЕ пробрасываем наружу. bot.catch у grammY работает только
+      // при long polling — на вебхуке исключение уходит во фреймворк, тот
+      // отвечает 500, а Telegram шлёт апдейт заново. Повтор здесь опаснее
+      // потери: обработка сообщения списывает токены.
+      req.log.error({ err: String(err).slice(0, 300) }, 'обработчик апдейта упал');
+      if (!reply.sent) return reply.send({ ok: true });
+      return reply;
+    }
   });
 
   app.log.info({ path: `/tg/${env.TELEGRAM_WEBHOOK_SECRET.slice(0, 6)}…` }, 'вебхук Telegram зарегистрирован');
@@ -31,7 +41,9 @@ export async function installWebhook(bot: Bot, log: FastifyInstance['log']): Pro
   try {
     await bot.api.setWebhook(url, {
       secret_token: env.TELEGRAM_WEBHOOK_SECRET,
-      allowed_updates: ['message'],
+      // ⚠️ callback_query обязателен: без него Telegram НЕ пришлёт нажатие
+      // кнопки «Скачать и поделиться», и она будет молча мёртвой.
+      allowed_updates: ['message', 'callback_query'],
       drop_pending_updates: true,
     });
     const me = await bot.api.getMe();

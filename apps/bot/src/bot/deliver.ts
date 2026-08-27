@@ -1,9 +1,8 @@
-import { InlineKeyboard, InputFile, InputMediaBuilder } from 'grammy';
+import { InputFile, InputMediaBuilder } from 'grammy';
 import type { Bot } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
-import { renderQrPng, shareUrl } from '@mq/core';
 import type { AppContext } from '../context.js';
-import { env } from '../env.js';
+import { shareButton } from './share-button.js';
 
 /**
  * Досылка готовой картинки участнику.
@@ -57,13 +56,9 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       return;
     }
 
-    // Короткая ссылка на публичную страницу — цель QR-кода из ТЗ.
-    // Её могло не быть, если создание упало: тогда просто отдаём картинку.
-    const link = await shortLinkFor(app, generationId, log);
-    const page = link ? shareUrl(env.PUBLIC_URL, link) : null;
-    const markup = page
-      ? new InlineKeyboard().url('Скачать и поделиться', page)
-      : undefined;
+    // Кнопка та же, что стояла на заглушке, но теперь рабочая: знак запрета
+    // уходит, нажатие присылает QR-карточку.
+    const markup = shareButton(generationId, true);
 
     // Основной путь: подменяем картинку ВНУТРИ карточки «Рисую…».
     // Участник видит превращение прямо там, где ждал, без второго сообщения.
@@ -72,7 +67,7 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       try {
         await bot.api.editMessageMedia(chatId, cardId,
           InputMediaBuilder.photo(new InputFile(buf, 'mqbot.jpg'), caption ? { caption } : {}),
-          markup ? { reply_markup: markup } : {});
+          { reply_markup: markup });
         log.info({ generationId, bytes: media.bytes }, 'картинка подменена в карточке');
         delivered = true;
       } catch (err) {
@@ -89,7 +84,7 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       try {
         await bot.api.sendPhoto(chatId, new InputFile(buf, 'mqbot.jpg'), {
           ...(caption ? { caption } : {}),
-          ...(markup ? { reply_markup: markup } : {}),
+          reply_markup: markup,
         });
         log.info({ generationId, bytes: media.bytes }, 'картинка доставлена отдельным сообщением');
         delivered = true;
@@ -98,50 +93,9 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       }
     }
 
-    if (delivered && page) await sendQrCard(app, bot, chatId, page, log);
+    // QR-карточку здесь НЕ шлём: она уходит только по нажатию кнопки.
+    // Второе сообщение на каждую генерацию засоряло чат (см. share-button.ts).
   };
-}
-
-/** Короткий id генерации, если он есть. */
-async function shortLinkFor(
-  app: AppContext, generationId: string, log: FastifyBaseLogger,
-): Promise<string | undefined> {
-  try {
-    const row = await app.share.byGenerationId(generationId);
-    return row?.shortId;
-  } catch (err) {
-    log.warn({ generationId, err: String(err) }, 'короткая ссылка не найдена');
-    return undefined;
-  }
-}
-
-/**
- * QR отдельным сообщением.
- *
- * ТЗ требует QR каждому участнику. В Telegram картинка и так под рукой,
- * поэтому ценность кода — показать его с экрана другу и забрать готовые
- * хештеги. Второе сообщение на каждую генерацию засоряет чат, поэтому
- * поведение выключается настройкой `share.sendQr` без выката.
- */
-async function sendQrCard(
-  app: AppContext, bot: Bot, chatId: number, page: string, log: FastifyBaseLogger,
-): Promise<void> {
-  if (await app.settings.get('share.sendQr') === 'off') return;
-  try {
-    const [png, hashtags] = await Promise.all([
-      renderQrPng(page),
-      app.settings.get('share.hashtags'),
-    ]);
-    const tags = hashtags.trim();
-    await bot.api.sendPhoto(chatId, new InputFile(png, 'qr.png'), {
-      caption: `Наведи камеру — откроется страница со скачиванием.\n${page}${tags ? `\n\n${tags}` : ''}`,
-      disable_notification: true,
-    });
-  } catch (err) {
-    // Не доставили QR — не беда: картинка у участника уже есть, а ссылка
-    // осталась кнопкой под ней.
-    log.warn({ err: String(err).slice(0, 140) }, 'QR-карточку отправить не вышло');
-  }
 }
 
 /**

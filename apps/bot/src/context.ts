@@ -42,7 +42,13 @@ export interface AppContext {
    * Отправляет карточку «Рисую…» и возвращает id сообщения.
    * По готовности картинка в этом же сообщении подменяется результатом.
    */
-  sendPlaceholderCard?: (chatId: bigint, caption: string) => Promise<bigint | null>;
+  sendPlaceholderCard?: (chatId: bigint, caption: string, generationId: string) => Promise<bigint | null>;
+  /**
+   * Ссылка на бота вида `https://t.me/<username>` — подвал публичной
+   * страницы. Берётся у самого Telegram при старте (`bot.init()`), а не из
+   * конфига: два стенда — два разных бота, и рассинхрон тут был бы тихим.
+   */
+  botUrl?: string;
   /** Провайдер собирается на каждый запрос: модель меняется в админке. */
   chatProvider: () => Promise<ChatProvider>;
 }
