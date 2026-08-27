@@ -7,6 +7,20 @@ import { handleIncoming } from '../agent/runner.js';
 import { phrases, unsupportedReply, stillThinking } from './phrases.js';
 import { prepareMessage } from './format.js';
 import { ingestPhoto } from './media.js';
+import { startGreeting, greetingText, START_CHIPS } from './greeting.js';
+
+/**
+ * Что уходит агенту вместо подписи, когда фото прислали молча.
+ *
+ * Экспортируется, чтобы регрессия гоняла ровно эту строку, а не её копию:
+ * поведение бота на фото целиком зависит от формулировки, и разъехавшийся
+ * дубль в тесте проверял бы не то, что работает на проде.
+ */
+export const PHOTO_WITHOUT_CAPTION =
+  '[Участник прислал фото без подписи. Если из разговора выше уже ясно, ' +
+  'чего он хочет от снимка, — делай это сразу, переспрашивать не надо. ' +
+  'Если не ясно — посмотри, что на снимке, и спроси одной фразой. ' +
+  'Своих идей не придумывай.]';
 
 /**
  * Бот — ОДИН диалог, а не меню (ADR 0003).
@@ -22,8 +36,29 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   const sweeper = setInterval(() => gate.sweep(), 10 * 60_000);
   sweeper.unref?.();
 
+  /**
+   * /start отвечает СРАЗУ и без модели — см. `greeting.ts`, там же почему.
+   * Если БД недоступна, всё равно здороваемся: молчание на первом касании
+   * хуже, чем приветствие без имени и баланса.
+   */
   bot.command('start', async (c) => {
-    await accept(c, 'Привет! Я только что открыл этого бота — расскажи коротко, что тут можно делать.');
+    const from = c.from;
+    if (!from) return;
+    try {
+      const g = await startGreeting(app, {
+        tgId: BigInt(from.id),
+        chatId: BigInt(c.chat.id),
+        tgMessageId: BigInt(c.msg.message_id),
+        from: {
+          username: from.username, firstName: from.first_name,
+          lastName: from.last_name, languageCode: from.language_code,
+        },
+      }, log);
+      await send(c, g.text, undefined, g.suggestions, g.keyboardWasShown);
+    } catch (err) {
+      log.error({ err: String(err), tgId: from.id }, 'приветствие не собралось');
+      await send(c, greetingText(from.first_name, null), undefined, [...START_CHIPS], false);
+    }
   });
 
   bot.on('message:text', async (c) => {
@@ -31,16 +66,17 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   });
 
   bot.on('message:photo', async (c) => {
-    // Без подписи участник ещё НЕ сказал, что делать. Раньше сюда шло
-    // «Вот моё фото.» — агент читал это как согласие и сам начинал генерацию
-    // (живой случай: прислал фото молча, получил себя космонавтом).
-    await accept(
-      c,
-      c.msg.caption?.trim() ||
-        '[Участник прислал фото и пока НЕ сказал, что с ним делать. ' +
-        'Посмотри, что на снимке, и спроси, чего он хочет. Ничего не запускай сам.]',
-      { photo: true },
-    );
+    // Без подписи намерение может быть уже названо РАНЬШЕ: «хочу космонавтом»
+    // → «пришли фото» → фото. Первая версия этой пометки была категоричной
+    // («участник НЕ сказал, что делать, спроси»), и агент переспрашивал даже
+    // там, где сам минуту назад попросил снимок, — живой случай на проде
+    // 27.08. Просить фото и тут же не помнить зачем — худшее, что бот может
+    // сделать с человеком, который всё сделал правильно.
+    //
+    // Пометка осталась ради обратного случая (молча прислал фото — не
+    // выдумывай ему профессию), но теперь она указывает на разговор, а не
+    // запрещает действовать.
+    await accept(c, c.msg.caption?.trim() || PHOTO_WITHOUT_CAPTION, { photo: true });
   });
 
   /**

@@ -104,6 +104,8 @@ export async function handleIncoming(
     tokenBalance: user.tokenBalance,
     costPerImage,
     imageCount: images.length,
+    hasWorld: images.some((i) => i.isWorld),
+    hasUserPhoto: images.some((i) => i.origin === 'user'),
   });
 
   // Агент может предложить кнопки через suggest_replies — собираем сюда.
