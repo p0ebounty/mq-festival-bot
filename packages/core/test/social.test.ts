@@ -18,17 +18,67 @@ describe('разбор ссылки на публикацию', () => {
     expect(checkLink('https://vk.com/id1?w=wall-12345_678').ok).toBe(true);
   });
 
-  it('отвергает ссылку на профиль, а не на публикацию', () => {
-    // Частая подмена: человек кидает свою страницу вместо конкретного поста.
+  it('ссылку на профиль берёт, но сильным доказательством не считает', () => {
+    // Раньше это был отказ. Картинка может лежать и на профиле, а решает
+    // всё равно сверка хеша — отказывать заранее не за что.
     const r = checkLink('https://t.me/examplechannel');
-    expect(r.ok).toBe(false);
-    expect(r.reason).toMatch(/публикаци/i);
+    expect(r.ok).toBe(true);
+    expect(r.known).toBe(false);
   });
 
-  it('отвергает чужие площадки и мусор', () => {
-    expect(checkLink('https://example.com/post/1').ok).toBe(false);
+  it('берёт незнакомый сайт: список площадок больше не пропуск', () => {
+    const r = checkLink('https://example.com/post/1');
+    expect(r.ok).toBe(true);
+    expect(r.platform).toBe('example.com');
+    expect(r.known).toBe(false);
+  });
+
+  it('известную сеть с постом помечает известной', () => {
+    for (const url of [
+      'https://t.me/examplechannel/42',
+      'https://vk.com/wall-12345_678',
+      'https://dzen.ru/a/abcdef',
+      'https://www.youtube.com/shorts/abc123',
+      'https://rutube.ru/video/deadbeef/',
+      'https://www.tiktok.com/@user/video/7300000000000000000',
+      'https://pinterest.com/pin/12345/',
+    ]) {
+      expect(checkLink(url), url).toMatchObject({ ok: true, known: true });
+    }
+  });
+
+  it('отвергает мусор и не-http', () => {
     expect(checkLink('просто текст').ok).toBe(false);
     expect(checkLink('javascript:alert(1)').ok).toBe(false);
+    expect(checkLink('ftp://files.example.com/a.jpg').ok).toBe(false);
+  });
+
+  /**
+   * Открытый список площадок сделал этот тест обязательным: ссылку
+   * открывает headless-браузер НА НАШЕМ сервере, и «проверю что угодно»
+   * без этих отказов означает чтение нашей же внутренней сети.
+   */
+  it('не ходит внутрь себя и на голые адреса', () => {
+    for (const url of [
+      'http://127.0.0.1:4002/',
+      'http://localhost/admin',
+      'http://169.254.169.254/latest/meta-data/',
+      'http://10.0.0.5/',
+      'http://backend.internal/',
+      'http://router.local/',
+    ]) {
+      expect(checkLink(url).ok, url).toBe(false);
+    }
+  });
+
+  it('не принимает нашу же страницу результата — это был бы бонус самому себе', () => {
+    const r = checkLink('https://bot.example.com/g/abcd2345');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/мою же страницу/i);
+  });
+
+  it('не принимает прямую ссылку на файл kie.ai', () => {
+    expect(checkLink('https://tempfile.redpandaai.co/kieai/1/x.jpg').ok).toBe(false);
   });
 
   it('Instagram принимается, но помечен как закрытый', () => {

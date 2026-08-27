@@ -2,7 +2,22 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../index';
 import { socialClaims, tokenLedger, users } from '../schema';
 
-export type ClaimEvidence = 'phash' | 'vision+page' | 'vision+screenshot' | 'none';
+/**
+ * Чем подтверждена публикация.
+ *
+ * `phash` — сильное: картинка на публичной странице ИЗВЕСТНОЙ соцсети
+ * совпала с нашей. Начисляет без ограничений.
+ *
+ * `phash+unlisted` — та же сверка, но на произвольном сайте. Доказательство
+ * ровно такое же по качеству, а вот подделать его там можно за минуту:
+ * положил свою картинку на свою страничку. Поэтому идёт в счёт лимита
+ * слабых подтверждений.
+ *
+ * `vision+*` — решал проверяющий агент, сверки хешей не было. Тоже под
+ * лимитом (ADR 0007).
+ */
+export type ClaimEvidence =
+  | 'phash' | 'phash+unlisted' | 'vision+page' | 'vision+screenshot' | 'none';
 
 export interface RecordClaimInput {
   userId: string;
@@ -45,10 +60,12 @@ export function socialRepo(db: Db) {
     /**
      * Сколько раз участнику начисляли по СЛАБОМУ доказательству.
      *
-     * Слабое — это когда решение приняла только vision-модель: страница не
-     * открылась или прислали один скриншот. Такие начисления ограничены
-     * `economy.weakProofLimit`, иначе самое слабое звено каскада становится
-     * дырой: нарисовал скриншот — получил токены.
+     * Слабое — это когда решение приняла только vision-модель (страница не
+     * открылась или прислали один скриншот) ЛИБО когда хеш совпал, но на
+     * незнакомом сайте. Такие начисления ограничены `economy.weakProofLimit`,
+     * иначе самое слабое звено каскада становится дырой: нарисовал скриншот
+     * или выложил картинку на свою же страничку — получил токены, причём
+     * больше, чем потратил на генерацию.
      */
     async weakApprovalCount(userId: string): Promise<number> {
       const [row] = await db.select({ n: sql<number>`count(*)::int` })
@@ -56,7 +73,7 @@ export function socialRepo(db: Db) {
         .where(and(
           eq(socialClaims.userId, userId),
           eq(socialClaims.status, 'approved'),
-          sql`${socialClaims.evidence} in ('vision+page', 'vision+screenshot')`,
+          sql`${socialClaims.evidence} in ('vision+page', 'vision+screenshot', 'phash+unlisted')`,
         ));
       return row?.n ?? 0;
     },

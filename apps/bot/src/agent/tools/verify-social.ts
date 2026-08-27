@@ -40,7 +40,9 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
       'Вызывай, когда участник присылает ССЫЛКУ на свой пост с нашей картинкой ' +
       'или говорит, что выложил её. ' +
       'url — ссылка на саму публикацию, а не на профиль или канал. ' +
-      'Подходят Telegram, VK, Одноклассники, X, Instagram. ' +
+      'Подходит ссылка на пост в ЛЮБОЙ соцсети — Telegram, VK, Одноклассники, Дзен, ' +
+      'YouTube, Rutube, TikTok, X, Instagram и другие. Список не закрытый: незнакомый ' +
+      'сайт инструмент тоже откроет и проверит, отказывать заранее не надо. ' +
       'НЕ вызывай, если ссылки нет: попроси её. Скриншот не подходит — объясни, ' +
       'что нужна именно ссылка, по ней видно, что пост действительно опубликован. ' +
       'Инструмент сам всё проверит и сам начислит: спрашивать разрешения не надо.',
@@ -168,6 +170,27 @@ export function makeVerifySocialTool(app: AppContext): AgentTool<z.infer<typeof 
             error: 'generation_already_rewarded',
           };
         }
+
+        // ⚠️ Совпавший хеш на НЕЗНАКОМОМ сайте — доказательство того же
+        // качества, но подделывается за минуту: положил свою картинку на
+        // свою страничку. Начисляем, но в счёт лимита слабых подтверждений,
+        // иначе получается печатный станок: генерация стоит 1 токен, бонус
+        // даёт 3.
+        if (!link.known) {
+          const usedUnlisted = await app.social.weakApprovalCount(ctx.userId);
+          if (usedUnlisted >= weakLimit) {
+            return reject(app, ctx, checks,
+              'картинку я узнал, но это не соцсеть, а бонус за такие ссылки уже выдавался — выложи пост в Telegram, VK, Одноклассники, Дзен или другую сеть',
+              { platform: link.platform, url: link.url, key, generationId: matched.id,
+                evidence: 'phash+unlisted' });
+          }
+          return approve(app, ctx, {
+            checks, evidence: 'phash+unlisted', bonus, url: link.url, key,
+            generationId: matched.id,
+            reason: 'Страница открылась без входа, картинка на ней совпала с твоей.',
+          });
+        }
+
         return approve(app, ctx, {
           checks, evidence: 'phash', bonus, url: link.url, key,
           generationId: matched.id,
