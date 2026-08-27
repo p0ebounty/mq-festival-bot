@@ -1,6 +1,6 @@
 import { and, desc, eq, gt, sql } from 'drizzle-orm';
 import type { Db } from '../index';
-import { conversations, messages, toolCalls, users } from '../schema';
+import { conversations, messages, toolCalls, tokenLedger, users } from '../schema';
 
 export function usersRepo(db: Db) {
   return {
@@ -25,6 +25,14 @@ export function usersRepo(db: Db) {
         tokenBalance: startBalance,
         lastSeenAt: new Date(),
       }).returning();
+      // Стартовый баланс — тоже движение: иначе журнал не сойдётся с балансом
+      // с самой первой строки, и сверка станет бесполезной.
+      if (startBalance !== 0) {
+        await db.insert(tokenLedger).values({
+          userId: created!.id, delta: startBalance,
+          balanceAfter: startBalance, reason: 'signup',
+        });
+      }
       return created!;
     },
   };
@@ -175,26 +183,57 @@ export function worldsRepo(db: Db) {
   };
 }
 
+/** Зачем двинулся баланс. Пишется в журнал вместе с движением. */
+export type LedgerReason = 'signup' | 'generation' | 'refund' | 'social_bonus' | 'admin';
+
+interface LedgerLink {
+  reason: LedgerReason;
+  generationId?: string | undefined;
+  socialClaimId?: string | undefined;
+}
+
 export function tokensRepo(db: Db) {
+  /**
+   * Журнал пишется ЗДЕСЬ, а не у вызывающих.
+   *
+   * Таблица `token_ledger` существовала с фазы 2 и всё это время оставалась
+   * пустой: баланс жил одним числом в `users`. Числа мало — по нему нельзя
+   * ответить «почему у меня столько», а именно это спрашивают на стенде.
+   * Если бы запись журнала оставалась на совести вызывающего, её однажды
+   * забыли бы — как забыли на четыре фазы.
+   */
+  async function note(userId: string, delta: number, balanceAfter: number, link: LedgerLink) {
+    await db.insert(tokenLedger).values({
+      userId, delta, balanceAfter, reason: link.reason,
+      ...(link.generationId ? { generationId: link.generationId } : {}),
+      ...(link.socialClaimId ? { socialClaimId: link.socialClaimId } : {}),
+    });
+  }
+
   return {
     /**
      * Атомарное списание: балансу нельзя уйти в минус даже при гонке двух
      * сообщений подряд. Возвращает новый баланс либо null, если не хватило.
      */
-    async charge(userId: string, amount: number): Promise<number | null> {
+    async charge(userId: string, amount: number, link: LedgerLink): Promise<number | null> {
       const rows = await db.update(users)
         .set({ tokenBalance: sql`${users.tokenBalance} - ${amount}` })
         .where(and(eq(users.id, userId), sql`${users.tokenBalance} >= ${amount}`))
         .returning({ balance: users.tokenBalance });
-      return rows[0]?.balance ?? null;
+      const balance = rows[0]?.balance;
+      if (balance === undefined) return null;
+      await note(userId, -amount, balance, link);
+      return balance;
     },
 
-    async grant(userId: string, amount: number): Promise<number> {
+    async grant(userId: string, amount: number, link: LedgerReason | LedgerLink): Promise<number> {
       const rows = await db.update(users)
         .set({ tokenBalance: sql`${users.tokenBalance} + ${amount}` })
         .where(eq(users.id, userId))
         .returning({ balance: users.tokenBalance });
-      return rows[0]?.balance ?? 0;
+      const balance = rows[0]?.balance ?? 0;
+      await note(userId, amount, balance, typeof link === 'string' ? { reason: link } : link);
+      return balance;
     },
   };
 }

@@ -52,7 +52,7 @@ export async function submitGeneration(
 
   // Списываем ДО постановки задачи и атомарно — иначе два быстрых
   // сообщения подряд уведут баланс в минус.
-  const balance = await app.tokens.charge(ctx.userId, cost);
+  const balance = await app.tokens.charge(ctx.userId, cost, { reason: 'generation' });
   if (balance === null) {
     return {
       ok: false,
@@ -120,7 +120,7 @@ export async function submitGeneration(
   }
 
   // Ни одна модель не приняла — возвращаем токены.
-  await app.tokens.grant(ctx.userId, cost);
+  await app.tokens.grant(ctx.userId, cost, { reason: 'refund', generationId: gen.id });
   await app.generations.markFailed(gen.id, 'no_model', lastError);
   return {
     ok: false,

@@ -26,7 +26,10 @@ export const claimStatus = pgEnum('claim_status', [
   'pending',   // ждёт автопроверки
   'approved',
   'rejected',
-  'manual',    // спорное → ручная модерация
+  // ⚠️ 'manual' — мёртвое значение. Ручной модерации в проекте нет: бот
+  // автономен, каждая ветка каскада решает сама (ADR 0007). Значение
+  // оставлено в enum, потому что удалять его из Postgres дорого, а вреда нет.
+  'manual',
 ]);
 
 // ─────────────────────────── участники ───────────────────────────
@@ -238,17 +241,28 @@ export const socialClaims = pgTable('social_claims', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   generationId: uuid('generation_id').references(() => generations.id, { onDelete: 'set null' }),
-  screenshotMediaId: uuid('screenshot_media_id').notNull()
-    .references(() => media.id, { onDelete: 'cascade' }),
+  // Скриншот — ЗАПАСНОЙ путь (ADR 0007): обычно приходит ссылка, а не картинка.
+  screenshotMediaId: uuid('screenshot_media_id')
+    .references(() => media.id, { onDelete: 'set null' }),
+  /** Нормализованный адрес публикации. */
+  postUrl: text('post_url'),
+  /**
+   * Хеш нормализованного адреса — ключ дедупликации.
+   * Уникальный: один пост приносит бонус ровно один раз, кто бы его ни подал.
+   */
+  urlKey: varchar('url_key', { length: 32 }),
+  /** На чём основан вердикт: phash | vision+page | vision+screenshot | none. */
+  evidence: text('evidence'),
+  /** Что именно сошлось: домен, публичность, картинка, хештеги. */
+  checks: jsonb('checks'),
   status: claimStatus('status').notNull().default('pending'),
   tokensAwarded: integer('tokens_awarded').notNull().default(0),
-  verdictReason: text('verdict_reason'),      // объяснение авто- или ручной проверки
-  reviewedBy: uuid('reviewed_by'),
-  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  verdictReason: text('verdict_reason'),      // объяснение автопроверки
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('social_claims_status_idx').on(t.status, t.createdAt),
   index('social_claims_user_idx').on(t.userId),
+  uniqueIndex('social_claims_url_uniq').on(t.urlKey),
 ]);
 
 // ─────────────────────────── настройки и админ ───────────────────────────

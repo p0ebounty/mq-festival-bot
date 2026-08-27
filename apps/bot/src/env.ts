@@ -22,6 +22,9 @@ const schema = z.object({
   // Пустой = подпись не проверяется, callback принимается по совпадению taskId.
   KIE_WEBHOOK_HMAC_KEY: z.string().default(''),
   MEDIA_ROOT: z.string().min(1),
+  // Chromium для проверки публикаций (фаза 8). На сервере уже стоит
+  // системный; в проде можно подменить на браузер из образа.
+  CHROMIUM_PATH: z.string().min(1).default('/usr/bin/chromium-browser'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
 

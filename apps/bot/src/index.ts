@@ -14,6 +14,8 @@ import { makeGenerateImageTool } from './agent/tools/generate-image.js';
 import { makeEditImageTool } from './agent/tools/edit-image.js';
 import { makeSuggestTool } from './agent/tools/suggest.js';
 import { makeGetBaseWorldTool } from './agent/tools/base-world.js';
+import { makeVerifySocialTool } from './agent/tools/verify-social.js';
+import { closeBrowser } from './social/page-fetch.js';
 import { makeMediaSender, makeMediaUploader, makePlaceholderSender } from './bot/media-out.js';
 
 const app = Fastify({
@@ -49,6 +51,7 @@ ctx.registry
   .register(makeGenerateImageTool(ctx))
   .register(makeEditImageTool(ctx))
   .register(makeGetBaseWorldTool(ctx))
+  .register(makeVerifySocialTool(ctx))
   .register(makeSuggestTool());
 
 const { bot } = createBot(ctx, app.log);
@@ -67,7 +70,9 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.once(sig, () => {
     app.log.info(`получен ${sig}, останавливаемся`);
     reconciler.stop();
-    void app.close().then(() => process.exit(0));
+    void closeBrowser()
+      .then(() => app.close())
+      .then(() => process.exit(0));
   });
 }
 

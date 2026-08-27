@@ -50,6 +50,20 @@
       "when": 1787813644956,
       "tag": "0006_workable_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787818737615,
+      "tag": "0007_hard_donald_blake",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787818747042,
+      "tag": "0008_smart_rogue",
+      "breakpoints": true
     }
   ]
 }

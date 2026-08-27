@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
-  callbackTaskId, ingestRemote, makeShortId, parseTaskRecord, verifyWebhook, type CallbackBody,
+  callbackTaskId, ingestRemote, makeShortId, parseTaskRecord, perceptualHash,
+  verifyWebhook, type CallbackBody,
 } from '@mq/core';
 import type { AppContext } from '../context.js';
 import { env } from '../env.js';
@@ -92,7 +93,9 @@ export async function applyTaskResult(
       log.warn({ generationId, fail: rec.failMessage }, 'генерация не удалась');
       // Токены возвращаем: участник не виноват, что модель не справилась.
       const gen = await ctx.generations.byId(generationId);
-      if (gen?.tokensCharged) await ctx.tokens.grant(gen.userId, gen.tokensCharged);
+      if (gen?.tokensCharged) {
+        await ctx.tokens.grant(gen.userId, gen.tokensCharged, { reason: 'refund', generationId });
+      }
       void ctx.deliverGeneration?.(generationId).catch(() => {});
     }
     return 'failed';
@@ -114,6 +117,16 @@ export async function applyTaskResult(
     sha256: stored.sha256,
     source: 'kie',
   });
+
+  // Перцептивный хеш считаем СРАЗУ, пока файл под рукой: по нему потом
+  // сверяется картинка в репосте участника (ADR 0007). Сбой хеширования
+  // не должен ронять доставку — бонус просто пойдёт слабым путём.
+  try {
+    const buf = await ctx.storage.read(stored.relPath);
+    await ctx.media.rememberPhash(mediaRow.id, await perceptualHash(buf));
+  } catch (err) {
+    log.warn({ generationId, err: String(err).slice(0, 120) }, 'pHash посчитать не вышло');
+  }
 
   // Длительность считаем ПО СВОИМ часам, а не по costTime от kie.ai:
   // в callback он приходит в секундах, а в recordInfo примеры показывают
