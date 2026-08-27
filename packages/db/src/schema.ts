@@ -52,6 +52,18 @@ export const users = pgTable('users', {
   currentWorldMediaId: uuid('current_world_media_id'),
   /** Когда выдан мир — чтобы он встал в реестр картинок на своё место. */
   currentWorldAt: timestamp('current_world_at', { withTimezone: true }),
+  /**
+   * Сообщение, под которым СЕЙЧАС висят кнопки-подсказки.
+   *
+   * Не флаг «висят / не висят», как было у нижней панели, а конкретный id:
+   * inline-кнопки принадлежат сообщению, и чтобы их снять, надо знать
+   * какому. Гасим при следующем же действии участника — подсказка к
+   * предыдущей реплике после его ответа только сбивает с толку.
+   *
+   * В БД, а не в памяти процесса: иначе каждый выкат оставлял бы по одному
+   * сообщению с вечными кнопками у каждого активного участника.
+   */
+  suggestMessageId: bigint('suggest_message_id', { mode: 'bigint' }),
   isBanned: boolean('is_banned').notNull().default(false),
   bannedReason: text('banned_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

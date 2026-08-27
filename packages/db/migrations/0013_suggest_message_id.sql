@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "suggest_message_id" bigint;

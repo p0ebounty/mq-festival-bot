@@ -24,6 +24,8 @@ import type { AppContext } from '../context.js';
 export interface CommandReply {
   text: string;
   suggestions: string[];
+  /** Нужен, чтобы запомнить, под каким сообщением остались кнопки. */
+  userId: string;
 }
 
 /** Общая обвязка команды: найти участника, записать вопрос и ответ в историю. */
@@ -44,7 +46,7 @@ async function reply(
   }, startBalance);
 
   if (user.isBanned) {
-    return { text: 'Доступ закрыт.', suggestions: [] };
+    return { text: 'Доступ закрыт.', suggestions: [], userId: user.id };
   }
 
   const built = await build(user);
@@ -61,7 +63,7 @@ async function reply(
   await app.conversations.touch(conversation.id);
 
   log.info({ userId: user.id, command }, 'команда отвечена заготовкой');
-  return { text: built.text, suggestions };
+  return { text: built.text, suggestions, userId: user.id };
 }
 
 export interface CommandInput {
