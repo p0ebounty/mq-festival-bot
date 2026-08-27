@@ -9,12 +9,9 @@ import { createBot } from './bot/index.js';
 import { makeDeliverer } from './bot/deliver.js';
 import { makeGetBalanceTool } from './agent/tools/get-balance.js';
 import { makeGenerateImageTool } from './agent/tools/generate-image.js';
-import { makeEditPhotoTool } from './agent/tools/edit-photo.js';
+import { makeEditImageTool } from './agent/tools/edit-image.js';
 import { makeSuggestTool } from './agent/tools/suggest.js';
-import {
-  makeListProfessionsTool, makeRestylePhotoTool,
-  makeGetBaseWorldTool, makeTransformWorldTool,
-} from './agent/tools/scenarios.js';
+import { makeGetBaseWorldTool } from './agent/tools/base-world.js';
 import { makeMediaSender, makeMediaUploader, makePlaceholderSender } from './bot/media-out.js';
 
 const app = Fastify({
@@ -42,16 +39,14 @@ app.get('/healthz', async () => ({
 registerKieCallback(app, ctx);
 registerMediaRoutes(app, ctx);
 
-// Набор инструментов агента. Каждый — одно намерение, без флагов-переключателей.
+// Набор инструментов агента: пять универсальных, без флагов-переключателей
+// и без «одна профессия — один инструмент» (ADR 0010).
 ctx.registry
   .register(makeGetBalanceTool(ctx))
   .register(makeGenerateImageTool(ctx))
-  .register(makeEditPhotoTool(ctx))
-  .register(makeSuggestTool())
-  .register(makeListProfessionsTool(ctx))
-  .register(makeRestylePhotoTool(ctx))
+  .register(makeEditImageTool(ctx))
   .register(makeGetBaseWorldTool(ctx))
-  .register(makeTransformWorldTool(ctx));
+  .register(makeSuggestTool());
 
 const { bot } = createBot(ctx, app.log);
 ctx.deliverGeneration = makeDeliverer(ctx, bot, app.log);

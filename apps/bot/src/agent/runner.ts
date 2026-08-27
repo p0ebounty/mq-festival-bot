@@ -4,6 +4,7 @@ import {
   type AgentMessage,
 } from '@mq/core';
 import type { AppContext } from '../context.js';
+import { collectDialogImages, imageContextMessages } from './images.js';
 
 export interface IncomingMessage {
   tgId: bigint;
@@ -60,19 +61,7 @@ export async function handleIncoming(
   const conversation = await app.conversations.current(user.id, msg.chatId, 30);
 
   const history = await app.conversations.history(conversation.id, historyLimit);
-  // Фото могло прийти сообщением раньше, чем просьба «сделай меня космонавтом».
-  const lastImageUrl = msg.imageUrls?.[0] ?? (await app.conversations.lastImageUrl(conversation.id)) ?? undefined;
 
-  // Что участник видел последним: свежая генерация или присланное фото.
-  // Если фото пришло прямо сейчас — оно и есть текущее, ничего не ищем.
-  let currentImageUrl = lastImageUrl;
-  if (!msg.imageUrls?.length) {
-    const last = await app.generations.lastResult(user.id);
-    if (last?.mediaId) {
-      const url = await app.uploadStoredMedia?.(last.mediaId);
-      if (url) currentImageUrl = url;
-    }
-  }
   const priorMessages: AgentMessage[] = history
     .filter((m) => m.role !== 'system' && (m.text ?? '').length > 0)
     .map((m): AgentMessage => ({
@@ -80,11 +69,9 @@ export async function handleIncoming(
       text: m.text ?? '',
     }));
 
-  const userMessage: AgentMessage = {
-    role: 'user',
-    text: msg.text,
-    ...(msg.imageUrls?.length ? { imageUrls: msg.imageUrls } : {}),
-  };
+  // Картинку к самому сообщению НЕ цепляем: она придёт ниже, в реестре, и
+  // уже со своим id. Иначе модель увидела бы её дважды и без опознавателя.
+  const userMessage: AgentMessage = { role: 'user', text: msg.text };
 
   await app.conversations.addMessage({
     conversationId: conversation.id,
@@ -94,13 +81,27 @@ export async function handleIncoming(
     ...(msg.imageUrls?.length ? { contentJson: { imageUrls: msg.imageUrls } } : {}),
   });
 
+  // Реестр строим ПОСЛЕ записи сообщения: тогда только что присланное фото
+  // тоже получает id и попадает в список (ADR 0010).
+  const images = await collectDialogImages(app, {
+    conversationId: conversation.id,
+    userId: user.id,
+    conversationStartedAt: conversation.startedAt,
+  });
+  const imagesInContext = await app.settings.getInt('agent.imagesInContext');
+  const imageMessages: AgentMessage[] = imageContextMessages(images, new Date(), imagesInContext)
+    .map((m): AgentMessage => ({
+      role: 'user',
+      text: m.text,
+      ...(m.imageUrls ? { imageUrls: m.imageUrls } : {}),
+    }));
+
   const customPrompt = await app.settings.get('agent.systemPrompt');
   const system = buildSystemPrompt(customPrompt || DEFAULT_SYSTEM_PROMPT, {
     firstName: user.firstName,
     tokenBalance: user.tokenBalance,
     costPerImage,
-    hasWorld: Boolean(user.currentWorldMediaId),
-    hasImage: Boolean(currentImageUrl),
+    imageCount: images.length,
   });
 
   // Агент может предложить кнопки через suggest_replies — собираем сюда.
@@ -113,15 +114,14 @@ export async function handleIncoming(
       provider: await app.chatProvider(),
       registry: app.registry,
       system,
-      messages: [...priorMessages, userMessage],
+      messages: [...priorMessages, ...imageMessages, userMessage],
       maxIterations,
       toolContext: {
         userId: user.id,
         conversationId: conversation.id,
         chatId: msg.chatId,
         userMessage: msg.text,
-        lastImageUrl,
-        currentImageUrl,
+        images,
         suggest: (options) => { suggestions = options; },
         notePlaceholderSent: () => { cardSent = true; },
         log: { info: (o, m) => log.info(o as object, m), warn: (o, m) => log.warn(o as object, m) },

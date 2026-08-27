@@ -52,19 +52,35 @@ export function makeMediaSender(app: AppContext, bot: Bot, log: FastifyBaseLogge
 }
 
 /**
+ * Ссылки kie.ai живут 14 дней. Считаем копию годной 13 — сутки запаса,
+ * чтобы срок не истёк ровно посреди диалога.
+ */
+const REMOTE_TTL_MS = 13 * 24 * 60 * 60 * 1000;
+
+/**
  * Заливает нашу картинку в хранилище kie.ai и отдаёт URL.
  * Нужно, когда модель должна прочитать файл, который лежит у нас.
+ *
+ * Результат кэшируется в `media.remote_url`: реестр картинок прикладывает к
+ * запросу до шести штук, и без кэша каждое сообщение участника означало бы
+ * шесть заливок мегабайтных файлов (ADR 0010).
  */
 export function makeMediaUploader(app: AppContext, log: FastifyBaseLogger) {
   return async function uploadStoredMedia(mediaId: string): Promise<string | null> {
     const row = await app.media.byId(mediaId);
     if (!row) return null;
+
+    if (row.remoteUrl && row.remoteUrlExpiresAt && row.remoteUrlExpiresAt > new Date()) {
+      return row.remoteUrl;
+    }
+
     try {
       const buf = await app.storage.read(row.path);
       const up = await app.kie.uploadBase64({
         base64: `data:${row.mimeType};base64,${buf.toString('base64')}`,
-        fileName: `world-${mediaId.slice(0, 12)}.jpg`,
+        fileName: `mq-${mediaId.slice(0, 12)}.jpg`,
       });
+      await app.media.rememberRemoteUrl(mediaId, up.downloadUrl, new Date(Date.now() + REMOTE_TTL_MS));
       return up.downloadUrl;
     } catch (err) {
       log.error({ mediaId, err: String(err) }, 'не удалось залить картинку в kie.ai');

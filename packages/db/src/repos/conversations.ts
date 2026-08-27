@@ -77,6 +77,24 @@ export function conversationsRepo(db: Db) {
       return null;
     },
 
+    /**
+     * Все фото, присланные участником в этом диалоге, по порядку.
+     * Половина реестра картинок (вторая — результаты генераций), ADR 0010.
+     */
+    async userImages(conversationId: string): Promise<Array<{ url: string; at: Date }>> {
+      const rows = await db.select({ content: messages.contentJson, at: messages.createdAt })
+        .from(messages)
+        .where(and(eq(messages.conversationId, conversationId), eq(messages.role, 'user')))
+        .orderBy(messages.createdAt);
+      const out: Array<{ url: string; at: Date }> = [];
+      for (const r of rows) {
+        const urls = (r.content as { imageUrls?: unknown } | null)?.imageUrls;
+        if (!Array.isArray(urls)) continue;
+        for (const u of urls) if (typeof u === 'string') out.push({ url: u, at: r.at });
+      }
+      return out;
+    },
+
     /** Последние N сообщений в хронологическом порядке. */
     async history(conversationId: string, limit: number) {
       const rows = await db.select().from(messages)
@@ -144,12 +162,15 @@ export function keyboardRepo(db: Db) {
 export function worldsRepo(db: Db) {
   return {
     async setCurrent(userId: string, mediaId: string) {
-      await db.update(users).set({ currentWorldMediaId: mediaId }).where(eq(users.id, userId));
+      await db.update(users)
+        .set({ currentWorldMediaId: mediaId, currentWorldAt: new Date() })
+        .where(eq(users.id, userId));
     },
-    async getCurrent(userId: string): Promise<string | null> {
-      const [row] = await db.select({ id: users.currentWorldMediaId })
+    /** Мир и когда он выдан — время нужно, чтобы поставить его в реестр картинок. */
+    async getCurrent(userId: string): Promise<{ mediaId: string; at: Date | null } | null> {
+      const [row] = await db.select({ id: users.currentWorldMediaId, at: users.currentWorldAt })
         .from(users).where(eq(users.id, userId)).limit(1);
-      return row?.id ?? null;
+      return row?.id ? { mediaId: row.id, at: row.at } : null;
     },
   };
 }
