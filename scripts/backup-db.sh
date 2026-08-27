@@ -4,13 +4,13 @@
 #
 #   ./scripts/backup-db.sh [dev|prod]
 #
-# Хранит 14 дней, как записано в правилах инфраструктуры. Пишет в
+# Хранит 7 дней, как записано в правилах инфраструктуры. Пишет в
 # /var/backups/mqbot, права 600 — в дампе персональные данные участников.
 set -euo pipefail
 
 ENVNAME="${1:-prod}"
 DIR=${BACKUP_DIR:-/var/backups/mqbot}
-KEEP_DAYS=${KEEP_DAYS:-14}
+KEEP_DAYS=${KEEP_DAYS:-7}
 ENV_FILE="${ENV_FILE:-/srv/mqbot-prod/.env.$ENVNAME}"
 
 [ -f "$ENV_FILE" ] || { echo "нет $ENV_FILE" >&2; exit 1; }
