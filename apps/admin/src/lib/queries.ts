@@ -121,8 +121,8 @@ export async function listUsers(opts: { q?: string } = {}) {
     isBanned: users.isBanned,
     lastSeenAt: users.lastSeenAt,
     createdAt: users.createdAt,
-    generations: sql<number>`(select count(*)::int from ${generations}
-      where ${generations.userId} = ${users.id})`,
+    generations: sql<number>`(select count(*)::int from generations g
+      where g.user_id = users.id)`,
   })
     .from(users)
     .where(where)
@@ -133,6 +133,24 @@ export async function listUsers(opts: { q?: string } = {}) {
   return { rows, total: total?.n ?? 0 };
 }
 
+/**
+ * ⚠️ Коррелированные подзапросы пишутся ГОЛЫМ SQL, без ${table} и ${column}.
+ *
+ * Drizzle в списке выборки рендерит колонку БЕЗ имени таблицы: конструкция
+ *   sql`(select count(*) from ${messages} where ${messages.conversationId} = ${conversations.id})`
+ * превращается в
+ *   (select count(*) from "messages" where "conversation_id" = "id")
+ * — оба имени резолвятся в колонки самого messages, сравнивается
+ * messages.conversation_id с messages.id. Это валидный SQL (обе колонки
+ * uuid), ошибки нет, ответ всегда 0.
+ *
+ * Так на проде админка показывала «0 сообщ.» у диалога из 38 сообщений и
+ * «0» генераций у всех участников. Молчаливый ноль хуже падения: его
+ * принимают за правду.
+ *
+ * Поэтому корреляция пишется явно и полностью: подзапросной таблице даётся
+ * алиас, внешняя называется своим именем.
+ */
 export async function userCard(id: string) {
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!user) return null;
@@ -155,8 +173,8 @@ export async function userCard(id: string) {
       id: conversations.id,
       startedAt: conversations.startedAt,
       lastMessageAt: conversations.lastMessageAt,
-      messages: sql<number>`(select count(*)::int from ${messages}
-        where ${messages.conversationId} = ${conversations.id})`,
+      messages: sql<number>`(select count(*)::int from messages m
+        where m.conversation_id = conversations.id)`,
     }).from(conversations).where(eq(conversations.userId, id))
       .orderBy(desc(conversations.lastMessageAt)).limit(20),
     db.select({ total: sql<number>`coalesce(sum(${tokenLedger.delta}), 0)::int` })
@@ -188,11 +206,11 @@ export async function listConversations(opts: { userId?: string } = {}) {
     tgId: users.tgId,
     startedAt: conversations.startedAt,
     lastMessageAt: conversations.lastMessageAt,
-    messages: sql<number>`(select count(*)::int from ${messages}
-      where ${messages.conversationId} = ${conversations.id})`,
-    tools: sql<number>`(select count(*)::int from ${toolCalls}
-      join ${messages} m on m.id = ${toolCalls.messageId}
-      where m.conversation_id = ${conversations.id})`,
+    messages: sql<number>`(select count(*)::int from messages m
+      where m.conversation_id = conversations.id)`,
+    tools: sql<number>`(select count(*)::int from tool_calls tc
+      join messages m on m.id = tc.message_id
+      where m.conversation_id = conversations.id)`,
   })
     .from(conversations)
     .innerJoin(users, eq(users.id, conversations.userId))
