@@ -92,7 +92,7 @@ export function SettingsView({ initial, routes }: Props) {
       <div className="flex flex-col gap-1">
         <h1 className="font-heading text-2xl font-semibold">Настройки</h1>
         <p className="text-muted-foreground text-sm">
-          Меняются на лету — перезапуск сервисов не нужен.
+          Применяются сразу, без перезапуска.
         </p>
       </div>
 
@@ -119,8 +119,7 @@ export function SettingsView({ initial, routes }: Props) {
                   )}
                 </CardTitle>
                 <CardDescription>
-                  Один ключ обслуживает и мозг агента, и генерацию картинок.
-                  Полное значение никогда не отображается и не покидает сервер.
+                  Один ключ на агента и картинки. Полное значение не показывается.
                 </CardDescription>
               </CardHeader>
 
@@ -175,8 +174,7 @@ export function SettingsView({ initial, routes }: Props) {
                       </div>
                     </div>
                     <FieldDescription>
-                      «Проверить ключ» запрашивает остаток кредитов у kie.ai — это подтверждает,
-                      что ключ рабочий.
+                      Проверка запрашивает у kie.ai остаток кредитов.
                     </FieldDescription>
                   </Field>
 
@@ -203,16 +201,14 @@ export function SettingsView({ initial, routes }: Props) {
             <Card>
               <CardHeader>
                 <CardTitle>Модель агента</CardTitle>
-                <CardDescription>
-                  Кто ведёт диалог и решает, какой инструмент вызвать.
-                </CardDescription>
+                <CardDescription>Ведёт диалог и вызывает инструменты.</CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <TextSetting
                     id="chat-model" label="Модель" settingKey="kie.chatModel"
                     rows={rows} onSave={save} saving={saving}
-                    hint="claude-sonnet-5 — заметно быстрее и втрое дешевле opus-5 при той же точности на этой задаче."
+                    hint="claude-sonnet-5 — быстрее и втрое дешевле opus-5."
                   />
                 </FieldGroup>
               </CardContent>
@@ -222,10 +218,8 @@ export function SettingsView({ initial, routes }: Props) {
               <CardHeader>
                 <CardTitle>Модели генерации картинок</CardTitle>
                 <CardDescription>
-                  Выбираются автоматически по типу задачи. Заданы в коде
-                  (<code className="font-mono text-xs">packages/core/src/images/router.ts</code>),
-                  поэтому здесь их не поменять — так результат остаётся предсказуемым.
-                  Первая в строке основная, остальные подхватывают при сбое или лимите.
+                  Заданы в коде, здесь не меняются. Первая в цепочке — основная,
+                  дальше запасные.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -257,7 +251,7 @@ export function SettingsView({ initial, routes }: Props) {
                   ))}
                   <Separator />
                   <p className="text-muted-foreground text-xs">
-                    Цена указана за одно изображение при стандартном качестве.
+                    Цена за изображение, стандартное качество.
                   </p>
                 </div>
               </CardContent>
@@ -270,24 +264,22 @@ export function SettingsView({ initial, routes }: Props) {
           <Card>
             <CardHeader>
               <CardTitle>Токены участников</CardTitle>
-              <CardDescription>
-                Значения по умолчанию — предположение, подтвердите с заказчиком.
-              </CardDescription>
+              <CardDescription>Значения по умолчанию не согласованы с заказчиком.</CardDescription>
             </CardHeader>
             <CardContent>
               <FieldGroup>
                 <TextSetting id="start-balance" label="Стартовый баланс" settingKey="economy.startBalance"
                   rows={rows} onSave={save} saving={saving} numeric
-                  hint="Сколько токенов получает участник при первом обращении." />
+                  hint="Токенов при первом обращении." />
                 <TextSetting id="cost-image" label="Цена генерации" settingKey="economy.costPerImage"
                   rows={rows} onSave={save} saving={saving} numeric
-                  hint="Списывается до постановки задачи; при ошибке возвращается." />
+                  hint="Списывается до задачи, при ошибке возвращается." />
                 <TextSetting id="social-bonus" label="Бонус за репост" settingKey="economy.socialBonus"
                   rows={rows} onSave={save} saving={saving} numeric
-                  hint="Начисляется после проверки публикации по ссылке." />
+                  hint="Начисляется после проверки публикации." />
                 <TextSetting id="weak-limit" label="Лимит слабых подтверждений" settingKey="economy.weakProofLimit"
                   rows={rows} onSave={save} saving={saving} numeric
-                  hint="Сколько раз участнику можно начислить бонус, когда картинку на публикации не удалось сверить точно. 0 — только точное совпадение." />
+                  hint="Бонусов по слабому доказательству на участника. 0 — только точное совпадение." />
               </FieldGroup>
             </CardContent>
           </Card>
@@ -298,7 +290,7 @@ export function SettingsView({ initial, routes }: Props) {
           <Card>
             <CardHeader>
               <CardTitle>Лимиты и агент</CardTitle>
-              <CardDescription>Защита от перегрузки на пике фестиваля.</CardDescription>
+              <CardDescription>Защита от перегрузки.</CardDescription>
             </CardHeader>
             <CardContent>
               <FieldGroup>
@@ -308,12 +300,12 @@ export function SettingsView({ initial, routes }: Props) {
                   rows={rows} onSave={save} saving={saving} numeric />
                 <TextSetting id="max-iter" label="Лимит итераций tool-use" settingKey="agent.maxToolIterations"
                   rows={rows} onSave={save} saving={saving} numeric
-                  hint="Сколько раз агент может вызвать инструменты за один ответ." />
+                  hint="Вызовов инструментов за один ответ." />
                 <TextSetting id="history" label="Сообщений в контексте" settingKey="agent.historyMessages"
                   rows={rows} onSave={save} saving={saving} numeric />
                 <TextSetting id="images-ctx" label="Картинок в контексте" settingKey="agent.imagesInContext"
                   rows={rows} onSave={save} saving={saving} numeric
-                  hint="Сколько картинок диалога прикладывается к запросу. Одна — это 1,5–6 тысяч входных токенов." />
+                  hint="Картинок диалога в запросе. Одна — 1,5–6 тыс. входных токенов." />
                 <TextSetting id="retention" label="Хранить медиа, дней" settingKey="media.retentionDays"
                   rows={rows} onSave={save} saving={saving} numeric />
               </FieldGroup>
@@ -326,15 +318,14 @@ export function SettingsView({ initial, routes }: Props) {
             <CardHeader>
               <CardTitle>Страница результата и репосты</CardTitle>
               <CardDescription>
-                Хештеги видны участнику на странице по QR-коду и в подписи к коду.
-                Точные значения нужно согласовать с заказчиком.
+                Видны на странице по QR-коду. С заказчиком не согласованы.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <FieldGroup>
                 <TextSetting id="hashtags" label="Хештеги для репоста" settingKey="share.hashtags"
                   rows={rows} onSave={save} saving={saving}
-                  hint="На проверку публикации не влияют — только показываются участнику." />
+                  hint="Показываются участнику, на проверку не влияют." />
               </FieldGroup>
             </CardContent>
           </Card>

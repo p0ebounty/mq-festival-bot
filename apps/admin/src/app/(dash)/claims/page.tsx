@@ -11,9 +11,7 @@ export default async function ClaimsPage() {
       <div>
         <h1 className="font-heading text-2xl font-semibold">Начисления за репосты</h1>
         <p className="text-muted-foreground mt-1 max-w-3xl text-sm">
-          Журнал проверок постфактум. Руками здесь ничего не согласовывается — бот автономен,
-          каждая проверка решает сама. Если каскад начнёт ошибаться, меняется настройка
-          «Лимит слабых подтверждений», а не отдельные заявки. Всего {total}.
+          Журнал проверок. Бот решает сам, руками ничего не согласовывается. Всего {total}.
         </p>
       </div>
       <ClaimsTable

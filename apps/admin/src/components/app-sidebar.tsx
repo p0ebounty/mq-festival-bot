@@ -40,12 +40,11 @@ export function AppSidebar({ env }: { env: 'dev' | 'prod' }) {
           <span className="font-heading truncate text-base font-semibold group-data-[collapsible=icon]:hidden">
             MQ&nbsp;Bot
           </span>
-          <Badge
-            variant={env === 'prod' ? 'destructive' : 'secondary'}
-            className="group-data-[collapsible=icon]:hidden"
-          >
-            {env === 'prod' ? 'production' : 'разработка'}
-          </Badge>
+          {env === 'dev' && (
+            <Badge variant="secondary" className="group-data-[collapsible=icon]:hidden">
+              разработка
+            </Badge>
+          )}
         </div>
       </SidebarHeader>
 
