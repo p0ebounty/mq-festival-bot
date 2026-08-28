@@ -5,6 +5,7 @@ import {
 } from '@mq/core';
 import type { AppContext } from '../context.js';
 import { collectDialogImages, imageContextMessages } from './images.js';
+import { capReply, DRAWING_TOOLS } from './reply-limit.js';
 
 export interface IncomingMessage {
   tgId: bigint;
@@ -138,12 +139,40 @@ export async function handleIncoming(
     return { text, userId: user.id, conversationId: conversation.id };
   }
 
+  // Ограничитель длины — последний заслон перед отправкой (см. reply-limit.ts).
+  // Инструменты к этому моменту УЖЕ отработали: режется текст, а не ход.
+  // Откатывать выданную картинку или списанный токен он не может и не должен.
+  const drew = result.toolCalls.some((t) => DRAWING_TOOLS.has(t.name) && t.result.ok);
+  const capped = capReply(result.text, { drawing: drew });
+
+  if (capped.cut) {
+    // Подсказки того же хода выбрасываем: они были про то, что мы только что
+    // отрезали. Живой случай — кнопка «Сделай для GitHub Pages» под vite-проектом.
+    suggestions = [];
+    log.warn({
+      userId: user.id,
+      reason: capped.cut.reason,
+      chars: capped.cut.chars,
+      tools: result.toolCalls.map((t) => t.name),
+    }, 'ответ агента обрезан ограничителем');
+  }
+
   // Записываем ответ ассистента и все вызовы инструментов под ним.
+  //
+  // В text — то, что человек РЕАЛЬНО увидел, иначе админка врёт про диалог.
+  // Оригинал уходит в content_json: раздел «Диалоги» это главный инструмент
+  // отладки агента, и без оригинала никто не узнает, что модель пыталась
+  // сделать. В историю следующего хода уйдёт именно text — модель должна
+  // прочитать свой отказ, а не продолжить с места обрыва.
   const assistantRow = await app.conversations.addMessage({
     conversationId: conversation.id,
     role: 'assistant',
-    text: result.text,
-    contentJson: { iterations: result.iterations, hitLimit: result.hitLimit },
+    text: capped.text,
+    contentJson: {
+      iterations: result.iterations,
+      hitLimit: result.hitLimit,
+      ...(capped.cut ? { cut: capped.cut } : {}),
+    },
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
   });
@@ -168,7 +197,7 @@ export async function handleIncoming(
   }
 
   return {
-    text: result.text,
+    text: capped.text,
     userId: user.id,
     conversationId: conversation.id,
     ...(cardSent ? { cardSent } : {}),
