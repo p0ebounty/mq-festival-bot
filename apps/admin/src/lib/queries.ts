@@ -339,17 +339,19 @@ export async function listTasks() {
 }
 
 /**
- * Свежие работы по всем заданиям разом — чтобы жюри видело весь зал на
- * одном экране, а не заходило в каждое задание по очереди.
+ * Все присланные работы по заданиям — общим списком, свежие сверху.
  *
- * Берём последние работы и раскладываем по заданиям в коде: оконная
- * функция ради шести картинок на задание того не стоит, а объёмы
- * фестивальные.
+ * Это вторая вкладка раздела и главный экран жюри: работы листают подряд,
+ * а не заходят в каждое задание по очереди. У каждой работы видно, по
+ * какому она заданию, — сравнивать между разными заданиями всё равно
+ * нельзя, и подпись об этом напоминает.
  */
-export async function recentWorksByTask(perTask = 6) {
-  const rows = await db.select({
+export async function listTaskWorks() {
+  return db.select({
     id: generations.id,
     taskId: generations.taskId,
+    taskText: baseWorlds.taskText,
+    taskTitle: baseWorlds.title,
     userPrompt: generations.userPrompt,
     createdAt: generations.createdAt,
     mediaId: media.id,
@@ -361,18 +363,10 @@ export async function recentWorksByTask(perTask = 6) {
     .from(generations)
     .innerJoin(users, eq(users.id, generations.userId))
     .innerJoin(media, eq(media.id, generations.outputMediaId))
-    .where(and(sql`${generations.taskId} is not null`, eq(generations.status, 'success')))
+    .innerJoin(baseWorlds, eq(baseWorlds.id, generations.taskId))
+    .where(eq(generations.status, 'success'))
     .orderBy(desc(generations.createdAt))
     .limit(ROW_LIMIT);
-
-  const byTask = new Map<string, typeof rows>();
-  for (const r of rows) {
-    const key = r.taskId!;
-    const list = byTask.get(key) ?? [];
-    if (list.length < perTask) list.push(r);
-    byTask.set(key, list);
-  }
-  return byTask;
 }
 
 /** Одно задание и все удачные работы по нему — сеткой, для сравнения. */
