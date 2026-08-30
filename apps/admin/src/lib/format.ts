@@ -1,10 +1,25 @@
-/** Форматирование для таблиц админки. Всё по-русски, время местное. */
+/** Форматирование для таблиц админки. Всё по-русски. */
+
+/**
+ * Часовой пояс, в котором админка показывает время.
+ *
+ * Задан ЯВНО, и на то две причины. Сервер живёт в UTC, поэтому без него
+ * страница на сервере рисовала «13:15», а браузер организатора — «16:15»:
+ * React считал это расхождением гидратации и перерисовывал таблицу
+ * (две ошибки в консоли Next на странице диалогов, 30.08). Плюс в
+ * серверном рендере время было на три часа раньше реального — на
+ * фестивале это сбивает с толку сильнее, чем кажется.
+ *
+ * Меняется здесь, если фестиваль пройдёт в другом поясе.
+ */
+export const ADMIN_TIME_ZONE = 'Europe/Moscow';
 
 export function dateTime(d: Date | string | null | undefined): string {
   if (!d) return '—';
   const date = typeof d === 'string' ? new Date(d) : d;
   return date.toLocaleString('ru-RU', {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+    timeZone: ADMIN_TIME_ZONE,
   });
 }
 
@@ -14,10 +29,18 @@ export function dateTimeFull(d: Date | string | null | undefined): string {
   return date.toLocaleString('ru-RU', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: ADMIN_TIME_ZONE,
   });
 }
 
-/** «5 мин назад» — на стенде важнее давность, чем точное время. */
+/**
+ * «5 мин назад» — на стенде важнее давность, чем точное время.
+ *
+ * ⚠️ Считается от `Date.now()`, поэтому сервер и браузер дают разный текст
+ * по самой природе величины: между рендерами проходит время. Узлы с этим
+ * значением помечаются `suppressHydrationWarning` — расхождение здесь
+ * ожидаемо и не является дефектом.
+ */
 export function ago(d: Date | string | null | undefined): string {
   if (!d) return 'никогда';
   const date = typeof d === 'string' ? new Date(d) : d;

@@ -34,7 +34,7 @@ const columns: ColumnDef<UserRow, unknown>[] = [
   { accessorKey: 'generations', header: 'Генераций', size: 120,
     cell: ({ getValue }) => <span className="tabular-nums">{String(getValue())}</span> },
   { accessorKey: 'lastSeenAt', header: 'Последний раз', size: 170,
-    cell: ({ getValue }) => <span className="text-muted-foreground">{ago(getValue() as string)}</span> },
+    cell: ({ getValue }) => <span className="text-muted-foreground" suppressHydrationWarning>{ago(getValue() as string)}</span> },
   {
     id: 'banned', header: '', size: 110, enableSorting: false,
     cell: ({ row }) => (row.original.isBanned ? <Badge variant="destructive">забанен</Badge> : null),

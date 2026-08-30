@@ -32,7 +32,7 @@ const columns: ColumnDef<DialogRow, unknown>[] = [
   { accessorKey: 'startedAt', header: 'Начат', size: 150,
     cell: ({ getValue }) => <span className="text-muted-foreground">{dateTime(getValue() as string)}</span> },
   { accessorKey: 'lastMessageAt', header: 'Последнее сообщение', size: 190,
-    cell: ({ getValue }) => <span className="text-muted-foreground">{ago(getValue() as string)}</span> },
+    cell: ({ getValue }) => <span className="text-muted-foreground" suppressHydrationWarning>{ago(getValue() as string)}</span> },
   { accessorKey: 'messages', header: 'Сообщений', size: 120,
     cell: ({ getValue }) => <span className="tabular-nums">{String(getValue())}</span> },
   { accessorKey: 'tools', header: 'Вызовов', size: 110,
