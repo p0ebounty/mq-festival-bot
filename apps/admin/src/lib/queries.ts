@@ -2,7 +2,7 @@ import 'server-only';
 import { and, count, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
 import {
   users, conversations, messages, toolCalls, generations, media,
-  socialClaims, tokenLedger, auditLog, adminUsers, shortLinks,
+  socialClaims, tokenLedger, auditLog, adminUsers, shortLinks, baseWorlds,
 } from '@mq/db/schema';
 import { db } from './db';
 
@@ -308,6 +308,69 @@ export async function listGenerations(opts: { status?: string; userId?: string }
 
   const [total] = await db.select({ n: count() }).from(generations).where(where);
   return { rows, total: total?.n ?? 0 };
+}
+
+// ───────────────────────────── задания ─────────────────────────────
+
+/**
+ * Список заданий с числом присланных работ.
+ *
+ * Это рабочее место жюри: победителя выбирают глазами, автоматической
+ * оценки в проекте нет (ADR 0013). Отсюда и вся потребность админки в
+ * заданиях — отобрать работы по одному заданию и сравнить их между собой.
+ */
+export async function listTasks() {
+  return db.select({
+    id: baseWorlds.id,
+    title: baseWorlds.title,
+    taskText: baseWorlds.taskText,
+    mediaId: baseWorlds.mediaId,
+    isActive: baseWorlds.isActive,
+    timesIssued: baseWorlds.timesIssued,
+    works: sql<number>`(
+      select count(*)::int from ${generations}
+      where ${generations.taskId} = ${baseWorlds.id}
+        and ${generations.status} = 'success'
+    )`,
+  })
+    .from(baseWorlds)
+    .where(eq(baseWorlds.kind, 'task'))
+    .orderBy(baseWorlds.title);
+}
+
+/** Одно задание и все удачные работы по нему — сеткой, для сравнения. */
+export async function taskWithWorks(id: string) {
+  const [task] = await db.select({
+    id: baseWorlds.id,
+    title: baseWorlds.title,
+    taskText: baseWorlds.taskText,
+    mediaId: baseWorlds.mediaId,
+    isActive: baseWorlds.isActive,
+    timesIssued: baseWorlds.timesIssued,
+  })
+    .from(baseWorlds)
+    .where(and(eq(baseWorlds.id, id), eq(baseWorlds.kind, 'task')))
+    .limit(1);
+  if (!task) return null;
+
+  const works = await db.select({
+    id: generations.id,
+    userPrompt: generations.userPrompt,
+    createdAt: generations.createdAt,
+    mediaId: media.id,
+    userId: users.id,
+    firstName: users.firstName,
+    username: users.username,
+    tgId: users.tgId,
+  })
+    .from(generations)
+    .innerJoin(users, eq(users.id, generations.userId))
+    .innerJoin(media, eq(media.id, generations.outputMediaId))
+    .where(and(eq(generations.taskId, id), eq(generations.status, 'success')))
+    .orderBy(desc(generations.createdAt))
+    .limit(ROW_LIMIT);
+
+  return { task, works };
 }
 
 // ─────────────────────── начисления за репосты ───────────────────────
