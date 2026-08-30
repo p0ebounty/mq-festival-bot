@@ -20,6 +20,19 @@ export const generationKind = pgEnum('generation_kind', [
   'world',        // сценарий 2 ТЗ: базовый мир → новый мир
 ]);
 
+/**
+ * Тип записи в пуле готовых картинок.
+ *
+ * Мир и задание — одна и та же сущность (картинка плюс сопроводительный
+ * текст) и живут в одной таблице: структура совпадает, разница в одном
+ * поле. Но пулы не смешиваются при выдаче — иначе просьба «дай мир»
+ * однажды пришлёт Колизей (ADR 0013).
+ */
+export const poolKind = pgEnum('pool_kind', [
+  'world',  // свободная игра: меняй как хочешь
+  'task',   // конкретная цель: во что превратить
+]);
+
 export const messageRole = pgEnum('message_role', ['user', 'assistant', 'system']);
 
 export const claimStatus = pgEnum('claim_status', [
@@ -52,6 +65,16 @@ export const users = pgTable('users', {
   currentWorldMediaId: uuid('current_world_media_id'),
   /** Когда выдан мир — чтобы он встал в реестр картинок на своё место. */
   currentWorldAt: timestamp('current_world_at', { withTimezone: true }),
+  /**
+   * Задание, которое участнику выдали последним.
+   *
+   * Это НЕ состояние «задание идёт / завершено» — такого у заданий нет
+   * (ADR 0013). Это указатель на картинку: без него выданная картинка не
+   * попадёт в реестр диалога, и править её будет нечем. Ровно та же роль,
+   * что у current_world_media_id, и хранится по тем же причинам.
+   */
+  currentTaskId: uuid('current_task_id'),
+  currentTaskAt: timestamp('current_task_at', { withTimezone: true }),
   /**
    * Сообщение, под которым СЕЙЧАС висят кнопки-подсказки.
    *
@@ -171,6 +194,15 @@ export const generations = pgTable('generations', {
    * в kie.ai. В админке это должно быть видно сразу.
    */
   sourceUrl: text('source_url'),
+  /**
+   * По какому заданию сделана работа. Проставляется, когда правится
+   * картинка задания или её потомок, — чтобы в админке работы можно было
+   * отобрать по заданию и сравнить между собой.
+   *
+   * Отдельного состояния «задание идёт» у участника нет: связь выводится
+   * из того, какую картинку правили (ADR 0013).
+   */
+  taskId: uuid('task_id').references(() => baseWorlds.id, { onDelete: 'set null' }),
   outputMediaId: uuid('output_media_id').references(() => media.id, { onDelete: 'set null' }),
 
   // Куда доставить готовую картинку. Храним прямо здесь: путь
@@ -236,10 +268,39 @@ export const baseWorlds = pgTable('base_worlds', {
   title: text('title').notNull(),            // «средневековый замок»
   mediaId: uuid('media_id').notNull().references(() => media.id, { onDelete: 'cascade' }),
   sourcePrompt: text('source_prompt'),
+  kind: poolKind('kind').notNull().default('world'),
+  /**
+   * Текст задания — что участнику нужно получить из этой картинки.
+   * Заполнен только у записей с kind='task'; у миров его нет, там
+   * участник волен делать что угодно.
+   */
+  taskText: text('task_text'),
   isActive: boolean('is_active').notNull().default(true),
   timesIssued: integer('times_issued').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Журнал отказов модерации (ADR 0014).
+ *
+ * Без него границу не настроить: калибровка «что режется зря» делается по
+ * фактическим отказам, а не по ощущениям. Здесь же видно, когда участник
+ * упёрся в запрет и почему — иначе на вопрос «почему мне нельзя» ответить
+ * нечем.
+ */
+export const moderationLog = pgTable('moderation_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  /** Где сработало: на присланном фото или на запросе к генератору. */
+  stage: text('stage').notNull(),
+  /** Кто решил: classifier | stoplist | unavailable. */
+  source: text('source').notNull(),
+  category: text('category'),
+  reason: text('reason'),
+  /** Обрезанный запрос — по нему и понятно, зря отказали или по делу. */
+  snippet: text('snippet'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('moderation_log_created_idx').on(t.createdAt)]);
 
 export const socialClaims = pgTable('social_claims', {
   id: uuid('id').primaryKey().defaultRandom(),

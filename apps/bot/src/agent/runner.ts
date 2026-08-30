@@ -6,6 +6,7 @@ import {
 import type { AppContext } from '../context.js';
 import { collectDialogImages, imageContextMessages } from './images.js';
 import { capReply, DRAWING_TOOLS } from './reply-limit.js';
+import { moderate } from '../moderation/index.js';
 
 export interface IncomingMessage {
   tgId: bigint;
@@ -50,6 +51,27 @@ export async function handleIncoming(
 
   if (user.isBanned) {
     return { text: 'Доступ закрыт.', userId: user.id, conversationId: '' };
+  }
+
+  // Присланное фото проверяется ДО того, как попадёт в разговор и в
+  // хранилище: иначе оно успеет уйти модели вместе с историей и осесть в
+  // галерее админки. Текстовые запросы проверяются позже, у самой
+  // генерации, — там виден готовый промпт (ADR 0014).
+  if (msg.imageUrls?.length) {
+    const verdict = await moderate(app, {
+      userId: user.id,
+      stage: 'photo',
+      text: msg.text,
+      imageUrls: msg.imageUrls,
+    });
+    if (!verdict.allowed) {
+      log.info({ userId: user.id, category: verdict.category }, 'фото отклонено проверкой');
+      return {
+        text: `Такое фото я не возьму: ${verdict.reason}. Пришли другое — и сделаем.`,
+        userId: user.id,
+        conversationId: '',
+      };
+    }
   }
 
   const historyLimit = await app.settings.getInt('agent.historyMessages');

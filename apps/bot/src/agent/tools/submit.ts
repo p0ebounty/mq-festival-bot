@@ -1,5 +1,6 @@
 import { buildCreateTask, planModels, KieError, type ImageTask, type AspectRatio, type ToolResult, type ToolContext } from '@mq/core';
 import type { AppContext } from '../../context.js';
+import { moderate } from '../../moderation/index.js';
 import { env } from '../../env.js';
 
 export interface SubmitInput {
@@ -19,6 +20,12 @@ export interface SubmitInput {
    * запросом в kie.ai — у нас он не хранился нигде.
    */
   sourceUrl?: string | undefined;
+  /**
+   * По какому заданию сделана работа, если правилась картинка задания или
+   * её потомок. Проставляется из реестра картинок, а не из состояния
+   * участника: связь выводится из того, что правили (ADR 0013).
+   */
+  taskId?: string | undefined;
   /** Что сказать агенту при успехе — он перескажет это участнику. */
   successHint: string;
   /** Подпись к готовой картинке, написанная агентом. */
@@ -37,6 +44,29 @@ export async function submitGeneration(
   ctx: ToolContext,
   input: SubmitInput,
 ): Promise<ToolResult> {
+  // Проверка контента стоит ДО списания и до постановки задачи: через эту
+  // функцию проходят все генерации разом, а промпт для генератора пишет сам
+  // агент, и второго мнения в цепочке больше нет (ADR 0014).
+  const verdict = await moderate(app, {
+    userId: ctx.userId,
+    stage: 'prompt',
+    text: [ctx.userMessage, input.finalPrompt].filter(Boolean).join('\n'),
+    ...(input.images?.length ? { imageUrls: input.images } : {}),
+  });
+  if (!verdict.allowed) {
+    ctx.log.info({ category: verdict.category }, 'запрос отклонён проверкой');
+    return {
+      ok: false,
+      summary: `Такое рисовать нельзя: ${verdict.reason}.`,
+      note:
+        'Скажи это КОРОТКО и дружелюбно, одной фразой, без нотаций и без списка правил, ' +
+        'и сразу предложи другую идею. Токены не списаны. Спорить и обсуждать запрет не надо: ' +
+        'уговоры на него не действуют.',
+      error: 'moderation_blocked',
+      data: { category: verdict.category },
+    };
+  }
+
   const cost = await app.settings.getInt('economy.costPerImage');
   const concurrent = await app.settings.getInt('limits.concurrent');
 
@@ -81,6 +111,7 @@ export async function submitGeneration(
     tgChatId: ctx.chatId,
     conversationId: ctx.conversationId,
     ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
+    ...(input.taskId ? { taskId: input.taskId } : {}),
     ...(input.caption ? { caption: input.caption } : {}),
     ...(input.inputMediaIds?.length ? { inputMediaIds: input.inputMediaIds } : {}),
   });

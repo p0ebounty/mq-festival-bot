@@ -21,6 +21,8 @@ export interface CreateGenerationInput {
   conversationId?: string;
   /** Какая картинка ушла в модель — чтобы источник был виден в админке. */
   sourceUrl?: string;
+  /** По какому заданию сделана работа, если правилась картинка задания. */
+  taskId?: string;
   tgChatId?: bigint;
   caption?: string;
 }
@@ -41,6 +43,7 @@ export function generationsRepo(db: Db) {
         ...(input.toolCallId ? { toolCallId: input.toolCallId } : {}),
         ...(input.conversationId ? { conversationId: input.conversationId } : {}),
         ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
+        ...(input.taskId ? { taskId: input.taskId } : {}),
         ...(input.tgChatId !== undefined ? { tgChatId: input.tgChatId } : {}),
         ...(input.caption ? { caption: input.caption } : {}),
       }).returning();
@@ -143,6 +146,9 @@ export function generationsRepo(db: Db) {
         userPrompt: generations.userPrompt,
         // Нужен, чтобы отличить мир из игры от обычной правки фотографии.
         kind: generations.kind,
+        // По какому заданию сделана работа. Наследуется по цепочке правок:
+        // потомок картинки задания остаётся работой по тому же заданию.
+        taskId: generations.taskId,
         at: generations.completedAt,
       })
         .from(generations)

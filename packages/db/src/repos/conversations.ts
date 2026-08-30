@@ -1,6 +1,6 @@
 import { and, desc, eq, gt, sql } from 'drizzle-orm';
 import type { Db } from '../index';
-import { conversations, messages, toolCalls, tokenLedger, users } from '../schema';
+import { baseWorlds, conversations, messages, toolCalls, tokenLedger, users } from '../schema';
 
 export function usersRepo(db: Db) {
   return {
@@ -196,6 +196,41 @@ export function worldsRepo(db: Db) {
       const [row] = await db.select({ id: users.currentWorldMediaId, at: users.currentWorldAt })
         .from(users).where(eq(users.id, userId)).limit(1);
       return row?.id ? { mediaId: row.id, at: row.at } : null;
+    },
+  };
+}
+
+export function tasksRepo(db: Db) {
+  return {
+    /**
+     * Запомнить выданное задание.
+     *
+     * Нужно ровно для одного: чтобы картинка задания попала в реестр
+     * картинок диалога. Состояния «задание идёт» тут нет — у задания нет
+     * конца как события (ADR 0013).
+     */
+    async setCurrent(userId: string, taskId: string) {
+      await db.update(users)
+        .set({ currentTaskId: taskId, currentTaskAt: new Date() })
+        .where(eq(users.id, userId));
+    },
+
+    /** Последнее выданное задание вместе с картинкой и текстом. */
+    async getCurrent(userId: string): Promise<
+      { taskId: string; mediaId: string; taskText: string | null; title: string; at: Date | null } | null
+    > {
+      const [row] = await db.select({
+        taskId: baseWorlds.id,
+        mediaId: baseWorlds.mediaId,
+        taskText: baseWorlds.taskText,
+        title: baseWorlds.title,
+        at: users.currentTaskAt,
+      })
+        .from(users)
+        .innerJoin(baseWorlds, eq(baseWorlds.id, users.currentTaskId))
+        .where(eq(users.id, userId))
+        .limit(1);
+      return row ?? null;
     },
   };
 }

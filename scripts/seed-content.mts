@@ -1,5 +1,5 @@
 /**
- * Наполнение каталога фестиваля: профессии и пул базовых миров.
+ * Наполнение каталога фестиваля: профессии, пул базовых миров и задания.
  *   APP_ENV=dev tsx scripts/seed-content.mts
  * Идемпотентно: существующее не трогает, недостающие миры догенерирует.
  * Генерация миров тратит кредиты (~8 на мир).
@@ -10,7 +10,7 @@ loadEnv({ path: `.env.${process.env.APP_ENV ?? 'dev'}` });
 process.env.APP_ENV ??= 'dev';
 
 const { createContext } = await import('../apps/bot/src/context.js');
-const { PROFESSIONS, BASE_WORLDS } = await import('@mq/db');
+const { PROFESSIONS, BASE_WORLDS, TASKS } = await import('@mq/db');
 const { professions, baseWorlds } = await import('@mq/db/schema');
 const { getModel, buildCreateTask, ingestRemote } = await import('@mq/core');
 
@@ -55,7 +55,36 @@ for (const w of BASE_WORLDS) {
   }
 }
 
-const worlds = await app.db.select().from(baseWorlds);
-console.log(`\nмиров в пуле: ${worlds.length}`);
+console.log('\n=== задания ===');
+for (const t of TASKS) {
+  const [exists] = await app.db.select().from(baseWorlds).where(eq(baseWorlds.title, t.title)).limit(1);
+  if (exists) { console.log(`  ↺ «${t.title}» уже есть`); continue; }
+
+  process.stdout.write(`  … «${t.title}» `);
+  try {
+    const taskId = await app.kie.createTask(
+      buildCreateTask(model, { prompt: t.prompt, aspectRatio: '16:9', quality: 'standard' }));
+    const rec = await app.kie.waitForTask(taskId, { timeoutMs: 240_000, intervalMs: 5000 });
+    const url = rec.resultUrls[0];
+    if (!url) { console.log('✗ без ссылки'); continue; }
+
+    const stored = await ingestRemote(url, app.storage, { subdir: 'tasks' });
+    const m = await app.media.create({
+      path: stored.relPath, mimeType: stored.mimeType, bytes: stored.bytes,
+      sha256: stored.sha256, source: 'seed',
+    });
+    await app.db.insert(baseWorlds).values({
+      title: t.title, mediaId: m.id, sourcePrompt: t.prompt,
+      kind: 'task', taskText: t.task,
+    });
+    console.log(`✓ ${(stored.bytes / 1024).toFixed(0)}КБ, ${rec.creditsConsumed} кредитов`);
+  } catch (e) {
+    console.log(`✗ ${(e as Error).message.slice(0, 70)}`);
+  }
+}
+
+const pool = await app.db.select().from(baseWorlds);
+console.log(`\nмиров в пуле: ${pool.filter((r) => r.kind === 'world').length}`);
+console.log(`заданий в пуле: ${pool.filter((r) => r.kind === 'task').length}`);
 console.log(`кредитов осталось: ${await app.kie.getCredits()}`);
 process.exit(0);

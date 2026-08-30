@@ -33,6 +33,12 @@ export interface DialogImage {
    * молча перестал быть его миром.
    */
   isWorld?: boolean;
+  /**
+   * По какому заданию эта картинка — сама выданная основа или любая правка
+   * от неё. Нужно, чтобы работа записалась в реестр с тем же заданием и
+   * жюри могло отобрать работы по нему (ADR 0013).
+   */
+  taskId?: string;
   at: Date;
 }
 
@@ -44,6 +50,7 @@ interface Draft {
   at: Date;
   label: string;
   isWorld?: boolean;
+  taskId?: string;
   url?: string;
   mediaId?: string;
 }
@@ -79,6 +86,7 @@ export async function collectDialogImages(
       // Вся цепочка мира помечается миром, а не только последнее звено:
       // участник вправе вернуться к раннему варианту и продолжить с него.
       isWorld: gen.kind === 'world',
+      ...(gen.taskId ? { taskId: gen.taskId } : {}),
       label: idea ? `мы нарисовали: «${trim(idea, 70)}»` : 'картинка, которую мы нарисовали',
     });
   }
@@ -97,6 +105,22 @@ export async function collectDialogImages(
     });
   }
 
+  // Задание живёт у участника, как и мир: картинку выдали, а править её он
+  // может и через полчаса. Без этой записи основа задания в реестр не
+  // попадёт вовсе, и менять будет нечего.
+  const task = await app.tasks.getCurrent(input.userId);
+  if (task) {
+    drafts.push({
+      origin: 'bot',
+      at: task.at ?? new Date(input.conversationStartedAt.getTime() - 1),
+      mediaId: task.mediaId,
+      taskId: task.taskId,
+      label: task.taskText
+        ? `картинка задания: «${trim(task.taskText, 70)}»`
+        : `картинка задания «${task.title}»`,
+    });
+  }
+
   drafts.sort((a, b) => a.at.getTime() - b.at.getTime());
 
   const out: DialogImage[] = [];
@@ -112,11 +136,13 @@ export async function collectDialogImages(
     const seen = out.find((x) => x.url === url);
     if (seen) {
       if (d.isWorld) seen.isWorld = true;
+      if (d.taskId) seen.taskId = d.taskId;
       continue;
     }
     out.push({
       id: `img${out.length + 1}`, origin: d.origin, url, label: d.label, at: d.at,
       ...(d.isWorld ? { isWorld: true } : {}),
+      ...(d.taskId ? { taskId: d.taskId } : {}),
     });
   }
   return out;
