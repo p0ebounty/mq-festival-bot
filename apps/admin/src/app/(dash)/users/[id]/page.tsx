@@ -35,7 +35,7 @@ export default async function UserPage({ params }: PageProps<'/users/[id]'>) {
           <p className="text-muted-foreground mt-1 text-sm">
             telegram id {String(user.tgId)}
             {user.username ? ` · @${user.username}` : ''}
-            {' · '}был {ago(user.lastSeenAt)}
+            {' · '}был <span suppressHydrationWarning>{ago(user.lastSeenAt)}</span>
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="shrink-0">
