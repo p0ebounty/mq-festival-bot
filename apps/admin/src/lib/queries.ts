@@ -338,6 +338,43 @@ export async function listTasks() {
     .orderBy(baseWorlds.title);
 }
 
+/**
+ * Свежие работы по всем заданиям разом — чтобы жюри видело весь зал на
+ * одном экране, а не заходило в каждое задание по очереди.
+ *
+ * Берём последние работы и раскладываем по заданиям в коде: оконная
+ * функция ради шести картинок на задание того не стоит, а объёмы
+ * фестивальные.
+ */
+export async function recentWorksByTask(perTask = 6) {
+  const rows = await db.select({
+    id: generations.id,
+    taskId: generations.taskId,
+    userPrompt: generations.userPrompt,
+    createdAt: generations.createdAt,
+    mediaId: media.id,
+    userId: users.id,
+    firstName: users.firstName,
+    username: users.username,
+    tgId: users.tgId,
+  })
+    .from(generations)
+    .innerJoin(users, eq(users.id, generations.userId))
+    .innerJoin(media, eq(media.id, generations.outputMediaId))
+    .where(and(sql`${generations.taskId} is not null`, eq(generations.status, 'success')))
+    .orderBy(desc(generations.createdAt))
+    .limit(ROW_LIMIT);
+
+  const byTask = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const key = r.taskId!;
+    const list = byTask.get(key) ?? [];
+    if (list.length < perTask) list.push(r);
+    byTask.set(key, list);
+  }
+  return byTask;
+}
+
 /** Одно задание и все удачные работы по нему — сеткой, для сравнения. */
 export async function taskWithWorks(id: string) {
   const [task] = await db.select({
