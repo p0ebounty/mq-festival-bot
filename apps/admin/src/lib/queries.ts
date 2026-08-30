@@ -262,9 +262,32 @@ export async function conversationThread(id: string) {
     byMessage.set(c.messageId, list);
   }
 
+  // Картинки, которые бот нарисовал в этом диалоге.
+  //
+  // В ленте их не было вовсе: страница рисовала только вложения сообщений,
+  // то есть фото участника. Получалось, что видно, о чём просили, и не
+  // видно, что вышло, — а диалог заводился именно как инструмент разбора
+  // поведения агента.
+  const gens = await db.select({
+    id: generations.id,
+    status: generations.status,
+    kind: generations.kind,
+    caption: generations.caption,
+    userPrompt: generations.userPrompt,
+    createdAt: generations.createdAt,
+    completedAt: generations.completedAt,
+    failMessage: generations.failMessage,
+    mediaId: generations.outputMediaId,
+    taskId: generations.taskId,
+  })
+    .from(generations)
+    .where(eq(generations.conversationId, id))
+    .orderBy(generations.createdAt);
+
   return {
     conversation: conv,
     messages: msgs.map((m) => ({ ...m, calls: byMessage.get(m.id) ?? [] })),
+    generations: gens,
   };
 }
 
