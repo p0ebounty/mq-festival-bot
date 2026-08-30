@@ -149,3 +149,85 @@ export const BASE_WORLDS: ReadonlyArray<{ title: string; prompt: string }> = [
       'people walking under a vast glass roof, bright daylight, clean architectural illustration',
   },
 ];
+
+/**
+ * Задания: картинка плюс конкретная цель, что из неё получить.
+ *
+ * В отличие от миров, где участник волен делать что угодно, здесь у него
+ * есть цель — и это отправная точка для тех, кто растерялся и не знает,
+ * чего хотеть (ADR 0013).
+ *
+ * `title` — внутреннее имя, участнику НЕ показывается: в нём содержится
+ * ответ («гонец → дрон»), а сама формулировка задания его не называет —
+ * догадаться должен человек.
+ *
+ * `prompt` рисует основу и пишется по-английски: модели так работают
+ * заметно лучше. `task` читает участник, поэтому он по-русски.
+ *
+ * ⚠️ Задания №6, №7 и №10 в исходном наборе были цепочками из трёх-четырёх
+ * превращений. Сведены к одному шагу по решению заказчика: одна картинка —
+ * одно задание — один промпт.
+ */
+export const TASKS: ReadonlyArray<{ title: string; prompt: string; task: string }> = [
+  {
+    title: 'колесница → болид',
+    prompt: 'A Roman chariot with two horses races across the arena of the Colosseum, ' +
+      'dust flying from the wheels, the stands packed with spectators, ' +
+      'detailed realistic illustration',
+    task: 'Поставь на эту арену болид Формулы-1. Всё остальное оставь как было.',
+  },
+  {
+    title: 'кто строит пирамиду',
+    prompt: 'Building a pyramid in ancient Egypt, thousands of workers hauling a huge stone ' +
+      'block on ropes, desert sand and heat haze, detailed realistic illustration',
+    task: 'Пусть эту же пирамиду строит современная техника.',
+  },
+  {
+    title: 'гонец → дрон',
+    prompt: 'A messenger on a lathered horse carries a scroll with a wax seal through the forest ' +
+      'towards the castle gates, dusk, torches burning on the walls, detailed illustration',
+    task: 'Замени гонца на то, чем письма доставляют сегодня.',
+  },
+  {
+    title: 'рыцарь → герой будущего',
+    prompt: 'A knight in steel plate armour with a sword and shield stands on the field after ' +
+      'the battle, banners and drifting smoke, cinematic illustration',
+    task: 'Поставь на его место героя из будущего.',
+  },
+  {
+    title: 'замок → штаб-квартира',
+    prompt: 'A feudal stone castle with towers rises above a village of thatched roofs, ' +
+      'peasants walking up the road, low angle view, detailed illustration',
+    task: 'Замени замок на здание, где сегодня сидит власть. Деревню не трогай.',
+  },
+  {
+    title: 'мастерская → производство без людей',
+    prompt: 'A craftsman in his workshop forges a horseshoe by hand with a hammer at the forge, ' +
+      'an apprentice works the bellows, warm firelight, detailed illustration',
+    task: 'Замени ручную кузницу на производство, где вообще нет людей.',
+  },
+  {
+    title: 'каравелла → атомный ледокол',
+    prompt: 'A wooden caravel under white sails in the open ocean, sailors on the yards, ' +
+      'seagulls, horizon line, realistic illustration',
+    task: 'Пусть этот океан пересечёт атомный ледокол вместо каравеллы.',
+  },
+  {
+    title: 'библиотека → дата-центр',
+    prompt: 'The Library of Alexandria, shelves of papyrus scrolls, scribes at their desks, ' +
+      'oil lamps, tall columns, realistic illustration',
+    task: 'Замени свитки на то, где знания хранят сегодня.',
+  },
+  {
+    title: 'столкновение эпох',
+    prompt: 'A medieval town fair, traders behind wooden stalls, a potter and a blacksmith at work, ' +
+      'a crowd of townsfolk, half-timbered houses, detailed illustration',
+    task: 'Добавь на эту ярмарку два предмета из нашего времени. Какие — решай сам.',
+  },
+  {
+    title: 'рынок сквозь века',
+    prompt: 'A market square of the ancient world, traders with clay amphorae, ox carts, ' +
+      'stone stalls under awnings, bright sunny day, detailed realistic illustration',
+    task: 'Перенеси этот рынок в 2050 год.',
+  },
+];

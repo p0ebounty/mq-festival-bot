@@ -1,6 +1,6 @@
 import {
   createDb, generationsRepo, mediaRepo, conversationsRepo, usersRepo, tokensRepo,
-  worldsRepo, shareRepo, socialRepo, ledgerRepo, type Db,
+  worldsRepo, tasksRepo, shareRepo, socialRepo, ledgerRepo, type Db,
 } from '@mq/db';
 import { SettingsService } from '@mq/config';
 import {
@@ -8,6 +8,7 @@ import {
   ToolRegistry, type ChatProvider,
 } from '@mq/core';
 import { env } from './env.js';
+import { MODERATION_MODEL } from './moderation/classifier.js';
 
 /**
  * Общий контекст приложения. Собирается один раз при старте и передаётся
@@ -25,6 +26,7 @@ export interface AppContext {
   users: ReturnType<typeof usersRepo>;
   tokens: ReturnType<typeof tokensRepo>;
   worlds: ReturnType<typeof worldsRepo>;
+  tasks: ReturnType<typeof tasksRepo>;
   /** Короткие ссылки на результаты — цель QR-кода. */
   share: ReturnType<typeof shareRepo>;
   /** Заявки на бонус за репост — журнал постфактум, не очередь (ADR 0007). */
@@ -60,6 +62,13 @@ export interface AppContext {
   botUrl?: string;
   /** Провайдер собирается на каждый запрос: модель меняется в админке. */
   chatProvider: () => Promise<ChatProvider>;
+  /**
+   * Провайдер для проверки контента. Отдельный от chatProvider, потому что
+   * модель здесь ЗАДАНА В КОДЕ: это контракт безопасности, а не крутилка.
+   * Переключат модель из админки — поведение модерации изменится молча
+   * (ADR 0014).
+   */
+  moderationProvider: () => Promise<ChatProvider>;
 }
 
 export function createContext(): AppContext {
@@ -79,8 +88,7 @@ export function createContext(): AppContext {
    * (ADR 0008). Gemini — OpenAI-совместимый chat/completions, модели
    * gpt-5-* — Responses API с потоком SSE на общем пути /codex.
    */
-  const chatProvider = async (): Promise<ChatProvider> => {
-    const model = await settings.get('kie.chatModel');
+  const providerFor = (model: string): ChatProvider => {
     const getApiKey = () => settings.get('kie.apiKey');
 
     if (model.startsWith('gpt-5')) {
@@ -93,6 +101,17 @@ export function createContext(): AppContext {
     });
   };
 
+  const chatProvider = async (): Promise<ChatProvider> =>
+    providerFor(await settings.get('kie.chatModel'));
+
+  /**
+   * Модель проверки контента — в коде, не в настройках (ADR 0014). Та же
+   * причина, по которой из админки убраны модель картинок и системный
+   * промпт: это не регулировка, а часть контракта. Мультимодальная —
+   * проверять надо и текст, и присланные фото.
+   */
+  const moderationProvider = async (): Promise<ChatProvider> => providerFor(MODERATION_MODEL);
+
   return {
     db, settings, storage, kie,
     generations: generationsRepo(db),
@@ -101,10 +120,12 @@ export function createContext(): AppContext {
     users: usersRepo(db),
     tokens: tokensRepo(db),
     worlds: worldsRepo(db),
+    tasks: tasksRepo(db),
     share: shareRepo(db),
     social: socialRepo(db),
     ledger: ledgerRepo(db),
     registry: new ToolRegistry(),
     chatProvider,
+    moderationProvider,
   };
 }

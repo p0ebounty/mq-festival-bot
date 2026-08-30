@@ -15,6 +15,7 @@ import { makeGenerateImageTool } from './agent/tools/generate-image.js';
 import { makeEditImageTool } from './agent/tools/edit-image.js';
 import { makeSuggestTool } from './agent/tools/suggest.js';
 import { makeGetBaseWorldTool } from './agent/tools/base-world.js';
+import { makeGetTaskTool } from './agent/tools/get-task.js';
 import { makeVerifySocialTool } from './agent/tools/verify-social.js';
 import { closeBrowser } from './social/page-fetch.js';
 import { makeMediaSender, makeMediaUploader, makePlaceholderSender } from './bot/media-out.js';
@@ -45,13 +46,16 @@ registerKieCallback(app, ctx);
 registerMediaRoutes(app, ctx);
 registerShareRoutes(app, ctx);
 
-// Набор инструментов агента: пять универсальных, без флагов-переключателей
-// и без «одна профессия — один инструмент» (ADR 0010).
+// Набор инструментов агента: универсальные, без флагов-переключателей и без
+// «одна профессия — один инструмент» (ADR 0010). get_task стоит рядом с
+// get_base_world намеренно: мир это свобода, задание это заданная цель, и
+// различать их флагом внутри одного инструмента как раз нельзя (ADR 0013).
 ctx.registry
   .register(makeGetBalanceTool(ctx))
   .register(makeGenerateImageTool(ctx))
   .register(makeEditImageTool(ctx))
   .register(makeGetBaseWorldTool(ctx))
+  .register(makeGetTaskTool(ctx))
   .register(makeVerifySocialTool(ctx))
   .register(makeSuggestTool());
 

@@ -15,15 +15,17 @@ function fakeApp(parts: {
   photos?: Array<{ url: string; at: Date }>;
   gens?: Array<{
     mediaId: string; caption: string | null; userPrompt: string;
-    kind?: 'image' | 'world' | 'profession'; at: Date | null;
+    kind?: 'image' | 'world' | 'profession'; taskId?: string | null; at: Date | null;
   }>;
   world?: { mediaId: string; at: Date | null } | null;
+  task?: { taskId: string; mediaId: string; taskText: string | null; title: string; at: Date | null } | null;
   upload?: (id: string) => Promise<string | null>;
 }): AppContext {
   return {
     conversations: { userImages: async () => parts.photos ?? [] },
     generations: { resultsForConversation: async () => parts.gens ?? [] },
     worlds: { getCurrent: async () => parts.world ?? null },
+    tasks: { getCurrent: async () => parts.task ?? null },
     uploadStoredMedia: parts.upload ?? (async (id: string) => `https://store/${id}.jpg`),
   } as unknown as AppContext;
 }
@@ -183,5 +185,49 @@ describe('картинки в контексте модели', () => {
     const msgs = imageContextMessages(make(3), at(1), 0);
     expect(msgs).toHaveLength(3);
     expect(msgs.every((m) => !m.imageUrls)).toBe(true);
+  });
+});
+
+describe('задания в реестре картинок', () => {
+  it('выданная картинка задания попадает в реестр вместе с id задания', async () => {
+    // Без этого её нечем править: реестр — единственный способ показать
+    // модели, какие картинки вообще есть (ADR 0013).
+    const images = await collect(fakeApp({
+      task: { taskId: 't-1', mediaId: 'm-arena', taskText: 'Поставь на арену болид', title: 'колесница → болид', at: at(2) },
+    }));
+    expect(images).toHaveLength(1);
+    expect(images[0]!.taskId).toBe('t-1');
+    expect(images[0]!.label).toContain('Поставь на арену болид');
+  });
+
+  it('правка от картинки задания наследует задание', async () => {
+    // Работа участника — это всегда потомок основы, и жюри должно найти
+    // её по тому же заданию, что и исходник.
+    const images = await collect(fakeApp({
+      task: { taskId: 't-1', mediaId: 'm-arena', taskText: 'Поставь на арену болид', title: 'колесница → болид', at: at(2) },
+      gens: [{ mediaId: 'm-f1', caption: 'болид на арене', userPrompt: 'замени колесницу на болид', taskId: 't-1', at: at(5) }],
+    }));
+    expect(images.map((i) => i.taskId)).toEqual(['t-1', 't-1']);
+  });
+
+  it('обычная картинка заданием не помечается', async () => {
+    const images = await collect(fakeApp({
+      photos: [{ url: 'https://p/selfie.jpg', at: at(1) }],
+      gens: [{ mediaId: 'm-cosmo', caption: 'космонавт', userPrompt: 'сделай космонавтом', at: at(3) }],
+    }));
+    expect(images.every((i) => i.taskId === undefined)).toBe(true);
+  });
+
+  it('задание и мир не путаются между собой', async () => {
+    // Мир двигает current_world участника, задание — нет. Смешать их
+    // значит однажды подменить человеку его мир Колизеем.
+    const images = await collect(fakeApp({
+      world: { mediaId: 'm-mars', at: at(1) },
+      task: { taskId: 't-1', mediaId: 'm-arena', taskText: 'Поставь на арену болид', title: 'колесница → болид', at: at(2) },
+    }));
+    const world = images.find((i) => i.isWorld);
+    const task = images.find((i) => i.taskId);
+    expect(world?.taskId).toBeUndefined();
+    expect(task?.isWorld).toBeUndefined();
   });
 });

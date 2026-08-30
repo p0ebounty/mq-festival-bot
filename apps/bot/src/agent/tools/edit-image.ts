@@ -111,6 +111,10 @@ export function makeEditImageTool(app: AppContext): AgentTool<z.infer<typeof inp
         // молча угоняла мир: живой случай 27.08, город на облаках заменился
         // отредактированной башней.
         kind: picked.isWorld ? 'world' : 'image',
+        // Работа по заданию наследуется от картинки, которую правят: и от
+        // самой выданной основы, и от любой правки в её цепочке. Отдельного
+        // состояния «задание идёт» у участника нет (ADR 0013).
+        taskId: picked.taskId,
         userPrompt: ctx.userMessage,
         finalPrompt: buildEditPrompt({ change: args.change }),
         aspectRatio: args.aspect_ratio ?? DEFAULT_ASPECT.free,
