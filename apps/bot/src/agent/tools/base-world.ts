@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { AgentTool } from '@mq/core';
 import { baseWorlds } from '@mq/db/schema';
 import type { AppContext } from '../../context.js';
@@ -36,7 +36,11 @@ export function makeGetBaseWorldTool(app: AppContext): AgentTool<Record<string, 
 
     async run(_input, ctx) {
       const [world] = await app.db.select().from(baseWorlds)
-        .where(eq(baseWorlds.isActive, true))
+        // ⚠️ Фильтр по типу обязателен: задания лежат в этой же таблице, и
+        // без него «дай готовый мир» однажды выдаёт картинку задания под её
+        // внутренним названием — а в названии лежит ответ («библиотека →
+        // дата-центр»). Поймано регрессией persona-e2e 30.08.
+        .where(and(eq(baseWorlds.isActive, true), eq(baseWorlds.kind, 'world')))
         // Реже выданные вперёд, дальше случайно: у соседей по стенду
         // должны быть разные миры, иначе турнир скучный.
         .orderBy(baseWorlds.timesIssued, sql`random()`)
