@@ -34,6 +34,7 @@ const PAGES = [
   { path: '/users', title: 'Участники', nav: 'Участники' },
   { path: '/dialogs', title: 'Диалоги', nav: 'Диалоги' },
   { path: '/generations', title: 'Генерации', nav: 'Генерации' },
+  { path: '/tasks', title: 'Задания', nav: 'Задания' },
   { path: '/claims', title: 'Начисления за репосты', nav: 'Репосты' },
   { path: '/audit', title: 'Аудит', nav: 'Аудит' },
   { path: '/settings', title: 'Настройки', nav: 'Настройки' },

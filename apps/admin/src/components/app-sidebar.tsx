@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  ImageIcon, LayoutDashboardIcon, MessagesSquareIcon, ScrollTextIcon,
+  ImageIcon,
+  TargetIcon, LayoutDashboardIcon, MessagesSquareIcon, ScrollTextIcon,
   SettingsIcon, Share2Icon, UsersIcon,
 } from 'lucide-react';
 import {
@@ -17,6 +18,7 @@ const ITEMS = [
   { href: '/users', label: 'Участники', icon: UsersIcon },
   { href: '/dialogs', label: 'Диалоги', icon: MessagesSquareIcon },
   { href: '/generations', label: 'Генерации', icon: ImageIcon },
+  { href: '/tasks', label: 'Задания', icon: TargetIcon },
   { href: '/claims', label: 'Репосты', icon: Share2Icon },
   { href: '/audit', label: 'Аудит', icon: ScrollTextIcon },
   { href: '/settings', label: 'Настройки', icon: SettingsIcon },
