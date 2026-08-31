@@ -362,15 +362,15 @@ export async function listTasks() {
 }
 
 /**
- * Все присланные работы по заданиям — общим списком, свежие сверху.
+ * Кто над каким заданием работал — строка на пару «участник + задание».
  *
- * Это вторая вкладка раздела и главный экран жюри: работы листают подряд,
- * а не заходят в каждое задание по очереди. У каждой работы видно, по
- * какому она заданию, — сравнивать между разными заданиями всё равно
- * нельзя, и подпись об этом напоминает.
+ * Список правок каждого участника в общей ленте не нужен: он делает
+ * три-пять попыток подряд, и на тридцати участниках лента превращается в
+ * сотню картинок, где половина — чужие черновики. Здесь обзор, а путь
+ * участника разбирается на своей странице.
  */
-export async function listTaskWorks() {
-  return db.select({
+export async function listTaskParticipants() {
+  const rows = await db.select({
     id: generations.id,
     taskId: generations.taskId,
     taskText: baseWorlds.taskText,
@@ -381,7 +381,6 @@ export async function listTaskWorks() {
     userId: users.id,
     firstName: users.firstName,
     username: users.username,
-    tgId: users.tgId,
   })
     .from(generations)
     .innerJoin(users, eq(users.id, generations.userId))
@@ -390,6 +389,57 @@ export async function listTaskWorks() {
     .where(eq(generations.status, 'success'))
     .orderBy(desc(generations.createdAt))
     .limit(ROW_LIMIT);
+
+  // Свежие идут первыми, значит первая встреченная пара — последняя попытка.
+  const latest = new Map<string, typeof rows[number] & { attempts: number }>();
+  for (const r of rows) {
+    const key = `${r.userId}:${r.taskId}`;
+    const seen = latest.get(key);
+    if (seen) seen.attempts++;
+    else latest.set(key, { ...r, attempts: 1 });
+  }
+  return [...latest.values()];
+}
+
+/**
+ * Путь одного участника по одному заданию: исходная картинка и все его
+ * попытки по порядку.
+ *
+ * Показывается как таймлайн, потому что важен не отдельный кадр, а как
+ * человек шёл к результату — что написал сначала, что поправил потом.
+ * Технических полей здесь нет намеренно: модель, длительность и кредиты
+ * нужны на разборе генерации, а не жюри.
+ */
+export async function taskAttempts(taskId: string, userId: string) {
+  const [task] = await db.select({
+    id: baseWorlds.id,
+    title: baseWorlds.title,
+    taskText: baseWorlds.taskText,
+    mediaId: baseWorlds.mediaId,
+  })
+    .from(baseWorlds)
+    .where(and(eq(baseWorlds.id, taskId), eq(baseWorlds.kind, 'task')))
+    .limit(1);
+  if (!task) return null;
+
+  const [user] = await db.select({
+    id: users.id, firstName: users.firstName, username: users.username, tgId: users.tgId,
+  }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) return null;
+
+  const attempts = await db.select({
+    id: generations.id,
+    status: generations.status,
+    userPrompt: generations.userPrompt,
+    caption: generations.caption,
+    createdAt: generations.createdAt,
+    mediaId: generations.outputMediaId,
+  })
+    .from(generations)
+    .where(and(eq(generations.taskId, taskId), eq(generations.userId, userId)))
+    .orderBy(generations.createdAt);
+
+  return { task, user, attempts };
 }
 
 /** Одно задание и все удачные работы по нему — сеткой, для сравнения. */
