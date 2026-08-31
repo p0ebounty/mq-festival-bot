@@ -64,6 +64,11 @@ export function makeGetBaseWorldTool(app: AppContext): AgentTool<Record<string, 
       if (!sent) {
         return { ok: false, summary: 'Картинку мира отправить не вышло. Попробуй ещё раз.', error: 'send_failed' };
       }
+      // Картинка уже ушла участнику, а текст агента по умолчанию
+      // вписывается в заглушку «Думаю…» — сообщение, отправленное ДО неё.
+      // Получалось «задание под картинкой», написанное над картинкой.
+      // Признак переводит ответ в новое сообщение, ниже картинки.
+      ctx.notePlaceholderSent?.();
       ctx.log.info({ worldId: world.id, title: world.title }, 'выдан стартовый мир');
 
       return {
