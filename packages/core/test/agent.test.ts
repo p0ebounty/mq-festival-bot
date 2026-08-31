@@ -72,6 +72,72 @@ describe('реестр инструментов', () => {
   });
 });
 
+describe('повтор при мигающем провайдере', () => {
+  /**
+   * Провайдер, который падает заданное число раз, а потом отвечает.
+   * Ровно то, что делал kie.ai 30–31.08: 500 полосами, между ними успех.
+   */
+  function flakyProvider(failures: number, retryable = true): ChatProvider & { calls: number } {
+    let left = failures;
+    return {
+      id: 'flaky', calls: 0,
+      async complete() {
+        this.calls++;
+        if (left-- > 0) throw new ChatProviderError('провайдер: HTTP 500', retryable);
+        return say('готово');
+      },
+    };
+  }
+
+  it('один временный отказ переживает молча', async () => {
+    const p = flakyProvider(1);
+    const r = await runAgent({ provider: p, registry: new ToolRegistry(), system: 's',
+      messages: [{ role: 'user', text: 'привет' }], toolContext: ctx });
+    expect(r.text).toBe('готово');
+    expect(p.calls).toBe(2);
+  });
+
+  it('два подряд — сдаётся, участник ждать не будет', async () => {
+    const p = flakyProvider(2);
+    await expect(runAgent({ provider: p, registry: new ToolRegistry(), system: 's',
+      messages: [{ role: 'user', text: 'привет' }], toolContext: ctx })).rejects.toThrow();
+    expect(p.calls).toBe(2);
+  });
+
+  it('невосстановимую ошибку не повторяет', async () => {
+    // Нет ключа, фатальный код — повтор ничего не изменит, только задержит.
+    const p = flakyProvider(1, false);
+    await expect(runAgent({ provider: p, registry: new ToolRegistry(), system: 's',
+      messages: [{ role: 'user', text: 'привет' }], toolContext: ctx })).rejects.toThrow();
+    expect(p.calls).toBe(1);
+  });
+
+  it('повторяется вызов модели, а не инструменты', async () => {
+    // ⚠️ Главное свойство: инструменты этой итерации ещё не выполнялись,
+    // поэтому повтор не может задвоить картинку или списание.
+    let runs = 0;
+    const counting = {
+      name: 'count', description: 'Считает вызовы.',
+      input: z.object({}), parameters: { type: 'object', properties: {} },
+      async run() { runs++; return { ok: true, summary: 'посчитал' }; },
+    };
+    let step = 0;
+    const p: ChatProvider = {
+      id: 'flaky-mid',
+      async complete() {
+        step++;
+        if (step === 1) return callTool('count', {});
+        if (step === 2) throw new ChatProviderError('провайдер: HTTP 500', true);
+        return say('всё');
+      },
+    };
+    const r = await runAgent({ provider: p, registry: new ToolRegistry().register(counting),
+      system: 's', messages: [{ role: 'user', text: 'посчитай' }], toolContext: ctx });
+    expect(r.text).toBe('всё');
+    expect(runs).toBe(1);
+  });
+});
+
 describe('цикл агента', () => {
   it('без инструментов сразу отдаёт текст', async () => {
     const p = fakeProvider([say('Привет!')]);

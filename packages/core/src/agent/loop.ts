@@ -40,6 +40,37 @@ export interface RunAgentOptions {
  * возвращаются все разом — иначе модель со временем перестаёт делать
  * параллельные вызовы.
  */
+/** Пауза перед повтором. Короткая: участник ждёт ответа в чате. */
+const RETRY_DELAY_MS = 700;
+
+/**
+ * Один повтор вызова модели на отказ, который сам себя объявил временным.
+ *
+ * Провайдер мигает: 30–31.08 kie.ai отдавал 500 на все чат-модели полосами
+ * — в логах их панели отказ в 10:10 и успех в 10:11. Без повтора каждый
+ * такой миг превращается в «Не получилось обдумать ответ» для участника,
+ * хотя следующий запрос через секунду проходит.
+ *
+ * ⚠️ Повторяется РОВНО вызов модели, а не итерация цикла: инструменты этой
+ * итерации ещё не выполнялись, поэтому задвоить картинку или списание
+ * невозможно. Повторять цикл целиком было бы нельзя именно поэтому.
+ *
+ * Флаг `retryable` до сих пор существовал в типе ошибки и не использовался
+ * нигде — повторы были только у картиночного клиента.
+ */
+async function completeWithRetry(
+  provider: ChatProvider,
+  req: Parameters<ChatProvider['complete']>[0],
+): Promise<Awaited<ReturnType<ChatProvider['complete']>>> {
+  try {
+    return await provider.complete(req);
+  } catch (err) {
+    if (!(err instanceof ChatProviderError) || !err.retryable) throw err;
+    await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+    return provider.complete(req);
+  }
+}
+
 export async function runAgent(opts: RunAgentOptions): Promise<AgentRunResult> {
   const maxIterations = opts.maxIterations ?? 8;
   const working: AgentMessage[] = [...opts.messages];
@@ -53,7 +84,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<AgentRunResult> {
   while (iterations < maxIterations) {
     iterations += 1;
 
-    const res = await opts.provider.complete({
+    const res = await completeWithRetry(opts.provider, {
       system: opts.system,
       messages: working,
       tools: opts.registry.schemas(),
