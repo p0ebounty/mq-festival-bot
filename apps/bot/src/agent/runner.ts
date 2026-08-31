@@ -15,6 +15,12 @@ export interface IncomingMessage {
   text: string;
   /** Публичные URL фото участника (уже загруженных в kie.ai). */
   imageUrls?: string[];
+  /**
+   * Наши копии этих фото. Ссылки провайдера умирают раньше обещанного
+   * (31.08 — на четвёртый день вместо четырнадцати), и без своей копии
+   * обновить их нечем: диалог начинает отвечать HTTP 400 на любое слово.
+   */
+  imageMediaIds?: string[];
   from: { username?: string | undefined; firstName?: string | undefined; lastName?: string | undefined; languageCode?: string | undefined };
 }
 
@@ -99,7 +105,9 @@ export async function handleIncoming(
     role: 'user',
     text: msg.text,
     tgMessageId: msg.tgMessageId,
-    ...(msg.imageUrls?.length ? { contentJson: { imageUrls: msg.imageUrls } } : {}),
+    ...(msg.imageUrls?.length
+      ? { contentJson: { imageUrls: msg.imageUrls, ...(msg.imageMediaIds?.length ? { imageMediaIds: msg.imageMediaIds } : {}) } }
+      : {}),
   });
 
   // Реестр строим ПОСЛЕ записи сообщения: тогда только что присланное фото

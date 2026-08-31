@@ -119,16 +119,30 @@ export function conversationsRepo(db: Db) {
      * Все фото, присланные участником в этом диалоге, по порядку.
      * Половина реестра картинок (вторая — результаты генераций), ADR 0010.
      */
-    async userImages(conversationId: string): Promise<Array<{ url: string; at: Date }>> {
+    /**
+     * Фото участника из этого диалога.
+     *
+     * Вместе со ссылкой отдаётся наша копия (`mediaId`), если она есть:
+     * ссылка провайдера умирает раньше заявленного срока, и обновить её
+     * можно только имея оригинал у себя. У сообщений, записанных до того
+     * как копии стали сохраняться, mediaId нет — там остаётся ссылка.
+     */
+    async userImages(conversationId: string): Promise<Array<{ url: string; mediaId?: string; at: Date }>> {
       const rows = await db.select({ content: messages.contentJson, at: messages.createdAt })
         .from(messages)
         .where(and(eq(messages.conversationId, conversationId), eq(messages.role, 'user')))
         .orderBy(messages.createdAt);
-      const out: Array<{ url: string; at: Date }> = [];
+      const out: Array<{ url: string; mediaId?: string; at: Date }> = [];
       for (const r of rows) {
-        const urls = (r.content as { imageUrls?: unknown } | null)?.imageUrls;
+        const content = r.content as { imageUrls?: unknown; imageMediaIds?: unknown } | null;
+        const urls = content?.imageUrls;
         if (!Array.isArray(urls)) continue;
-        for (const u of urls) if (typeof u === 'string') out.push({ url: u, at: r.at });
+        const ids = Array.isArray(content?.imageMediaIds) ? content.imageMediaIds : [];
+        urls.forEach((u, i) => {
+          if (typeof u !== 'string') return;
+          const id = ids[i];
+          out.push({ url: u, ...(typeof id === 'string' ? { mediaId: id } : {}), at: r.at });
+        });
       }
       return out;
     },

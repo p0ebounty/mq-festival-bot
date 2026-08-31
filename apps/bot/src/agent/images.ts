@@ -72,7 +72,10 @@ export async function collectDialogImages(
     drafts.push({
       origin: 'user',
       at: photo.at,
-      url: photo.url,
+      // Есть наша копия — идём через неё: ссылку провайдера она обновит,
+      // когда та протухнет. Нет копии (сообщение записано до того, как их
+      // стали сохранять) — остаётся ссылка как есть.
+      ...(photo.mediaId ? { mediaId: photo.mediaId } : { url: photo.url }),
       label: 'фото, которое прислал участник',
     });
   }

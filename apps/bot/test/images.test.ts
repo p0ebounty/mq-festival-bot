@@ -12,7 +12,7 @@ const T0 = new Date('2026-08-27T06:00:00Z');
 const at = (min: number) => new Date(T0.getTime() + min * 60_000);
 
 function fakeApp(parts: {
-  photos?: Array<{ url: string; at: Date }>;
+  photos?: Array<{ url: string; mediaId?: string; at: Date }>;
   gens?: Array<{
     mediaId: string; caption: string | null; userPrompt: string;
     kind?: 'image' | 'world' | 'profession'; taskId?: string | null; at: Date | null;
@@ -229,5 +229,30 @@ describe('задания в реестре картинок', () => {
     const task = images.find((i) => i.taskId);
     expect(world?.taskId).toBeUndefined();
     expect(task?.isWorld).toBeUndefined();
+  });
+});
+
+describe('протухшие ссылки провайдера', () => {
+  /**
+   * Живой случай 31.08: фото участника, залитые 27-го, отдавали 404 на
+   * четвёртый день вместо обещанных четырнадцати. Реестр подставлял мёртвый
+   * адрес, модель не могла его скачать и отвечала HTTP 400 на ЛЮБОЕ
+   * сообщение — участник не мог даже поздороваться.
+   */
+  it('фото участника берётся через нашу копию, а не по сохранённой ссылке', async () => {
+    const images = await collect(fakeApp({
+      photos: [{ url: 'https://kie/протухла.jpg', mediaId: 'm-selfie', at: at(1) }],
+      upload: async (id: string) => `https://kie/свежая-${id}.jpg`,
+    }));
+    expect(images[0]!.url).toBe('https://kie/свежая-m-selfie.jpg');
+  });
+
+  it('старые сообщения без копии продолжают работать по ссылке', async () => {
+    // Записи, сделанные до того, как копии стали сохраняться: обновить
+    // нечем, но и терять их нельзя — диалог должен собраться.
+    const images = await collect(fakeApp({
+      photos: [{ url: 'https://kie/старая.jpg', at: at(1) }],
+    }));
+    expect(images[0]!.url).toBe('https://kie/старая.jpg');
   });
 });

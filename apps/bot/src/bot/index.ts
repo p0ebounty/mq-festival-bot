@@ -230,10 +230,14 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
     const from = c.from!;
 
     const imageUrls: string[] = [];
+    // Наши копии присланных фото: по ним ссылка обновляется, когда протухнет.
+    const imageMediaIds: string[] = [];
 
     if (opts.photo) {
       try {
-        imageUrls.push(await ingestPhoto(app, c.api, c.msg?.photo ?? [], log));
+        const photo = await ingestPhoto(app, c.api, c.msg?.photo ?? [], log);
+        imageUrls.push(photo.url);
+        imageMediaIds.push(photo.mediaId);
       } catch (err) {
         log.warn({ err: String(err) }, 'не удалось забрать фото участника');
         await c.reply('Фото не получилось загрузить. Пришли ещё раз, пожалуйста.').catch(() => {});
@@ -277,6 +281,7 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
         tgMessageId: opts.fromCallback ? 0n : BigInt(c.msg?.message_id ?? 0),
         text,
         ...(imageUrls.length ? { imageUrls } : {}),
+      ...(imageMediaIds.length ? { imageMediaIds } : {}),
         from: {
           username: from.username,
           firstName: from.first_name,
