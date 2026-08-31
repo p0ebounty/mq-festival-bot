@@ -350,11 +350,14 @@ export async function listTasks() {
     mediaId: baseWorlds.mediaId,
     isActive: baseWorlds.isActive,
     timesIssued: baseWorlds.timesIssued,
-    works: sql<number>`(
-      select count(*)::int from ${generations}
-      where ${generations.taskId} = ${baseWorlds.id}
-        and ${generations.status} = 'success'
-    )`,
+    // ⚠️ Голым SQL с алиасом — это та самая ловушка Drizzle, описанная
+    // выше у userCard. Через ${generations.taskId} = ${baseWorlds.id}
+    // рендерится «task_id = id», обе колонки резолвятся в generations,
+    // сравнивается task_id с собственным id — валидный SQL и всегда ноль.
+    // Здесь на эти грабли наступили второй раз: счётчик работ показывал
+    // 0 у задания, где работ было три.
+    works: sql<number>`(select count(*)::int from generations g
+      where g.task_id = base_worlds.id and g.status = 'success')`,
   })
     .from(baseWorlds)
     .where(eq(baseWorlds.kind, 'task'))

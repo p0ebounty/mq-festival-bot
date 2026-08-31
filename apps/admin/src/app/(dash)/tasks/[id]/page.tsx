@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeftIcon } from 'lucide-react';
-import { dateTime, userLabel } from '@/lib/format';
+import { TaskWorksTable } from './works-table';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,30 +62,17 @@ export default async function TaskPage({ params }: PageProps<'/tasks/[id]'>) {
         <Card>
           <CardHeader><CardTitle>Работы участников</CardTitle></CardHeader>
           <CardContent>
-            {works.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                По этому заданию пока никто ничего не прислал.
-              </p>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {works.map((w) => (
-                  <Link
-                    key={w.id}
-                    href={`/generations/${w.id}`}
-                    className="focus-visible:ring-ring group rounded-lg border p-2 transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:outline-none"
-                  >
-                    <div className="bg-muted mb-2 overflow-hidden rounded">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/media/${w.mediaId}`} alt="" className="aspect-video w-full object-cover" />
-                    </div>
-                    <p className="line-clamp-2 text-sm" title={w.userPrompt}>{w.userPrompt}</p>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      {userLabel(w)} · {dateTime(w.createdAt)}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            )}
+            <TaskWorksTable
+              rows={works.map((w) => ({
+                id: w.id,
+                userPrompt: w.userPrompt,
+                createdAt: w.createdAt.toISOString(),
+                mediaId: w.mediaId,
+                userId: w.userId,
+                firstName: w.firstName,
+                username: w.username,
+              }))}
+            />
           </CardContent>
         </Card>
       </div>
