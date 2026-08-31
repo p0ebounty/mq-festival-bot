@@ -130,7 +130,11 @@ export class ResponsesApiProvider implements ChatProvider {
       throw new ChatProviderError(`провайдер: code=${parsed.code} ${parsed.msg ?? ''}`, !fatal);
     }
     if (!res.ok) {
-      throw new ChatProviderError(`провайдер: HTTP ${res.status}`, res.status >= 500);
+      // Тело обязательно: без него 400 не расследуешь. Живой случай 31.08 —
+      // в журнале месяцами было бы «провайдер: HTTP 400» и ни слова о том,
+      // что именно провайдеру не понравилось в запросе.
+      throw new ChatProviderError(
+        `провайдер: HTTP ${res.status} ${raw.slice(0, 300)}`, res.status >= 500);
     }
 
     const items = parsed.output ?? [];
