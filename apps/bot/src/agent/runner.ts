@@ -69,11 +69,20 @@ export async function handleIncoming(
       stage: 'photo',
       text: msg.text,
       imageUrls: msg.imageUrls,
+      log,
     });
     if (!verdict.allowed) {
-      log.info({ userId: user.id, category: verdict.category }, 'фото отклонено проверкой');
+      log.info({ userId: user.id, category: verdict.category, source: verdict.source },
+        'фото отклонено проверкой');
+      // Сбой проверки — НЕ «плохое фото». Прежний общий текст винил снимок
+      // и советовал прислать другой, хотя тот же самый проходит через
+      // минуту: 03.09 участник получил «такое фото я не возьму», когда у
+      // kie.ai моргнуло зрение. Совет обязан вести к успеху.
       return {
-        text: `Такое фото я не возьму: ${verdict.reason}. Пришли другое — и сделаем.`,
+        text: verdict.source === 'unavailable'
+          ? 'Проверка фото сейчас не отвечает — это у меня, а не у тебя. '
+            + 'Пришли то же самое ещё раз через минуту, и поедем дальше.'
+          : `Такое фото я не возьму: ${verdict.reason}. Пришли другое — и сделаем.`,
         userId: user.id,
         conversationId: '',
       };

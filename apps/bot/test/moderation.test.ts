@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { moderate } from '../src/moderation/index.js';
 import { parseVerdict } from '../src/moderation/classifier.js';
 import { checkStoplist } from '../src/moderation/stoplist.js';
+import type { AppContext } from '../src/context.js';
 
 describe('разбор ответа проверяющего', () => {
   it('читает обычный ответ', () => {
@@ -63,5 +65,110 @@ describe('аварийный список слов', () => {
   it('на чистом запросе молчит', () => {
     expect(checkStoplist('сделай меня космонавтом')).toBeNull();
     expect(checkStoplist('добавь коту мороженое')).toBeNull();
+  });
+});
+
+describe('срок ожидания проверки', () => {
+  // Живой отказ 03.09 на деве: участник прислал фото и получил «проверка
+  // сейчас недоступна». Две причины сошлись — kie.ai отдавал быстрый
+  // HTTP 500 на зрении, а срок ожидания был общий, 12 с, хотя проверка с
+  // картинкой отвечает 8–46 с. Обе превращали наш сбой в отказ участнику.
+  const ANSWER = '{"allowed": true, "category": null, "reason": "обычное фото"}';
+  const OK = { text: ANSWER, toolCalls: [], stopReason: 'end', usage: {} };
+
+  function appWith(provider: unknown) {
+    return {
+      moderationProvider: () => Promise.resolve(provider),
+      db: { insert: () => ({ values: () => Promise.resolve() }) },
+    } as unknown as AppContext;
+  }
+
+  /** Прогоняет проверку, докручивая фейковые таймеры до её конца. */
+  async function run(provider: unknown, input: Parameters<typeof moderate>[1]) {
+    const p = moderate(appWith(provider), input);
+    // С запасом: сюда входят и паузы между попытками, и сам срок ожидания.
+    await vi.advanceTimersByTimeAsync(400_000);
+    return p;
+  }
+
+  const PHOTO = {
+    stage: 'photo' as const, text: 'что на фото', imageUrls: ['https://example.test/a.jpg'],
+  };
+
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('фото: проверка на 30 с успевает ответить', async () => {
+    // Прежние 12 с обрывали её здесь, и fail-closed давал отказ.
+    const provider = {
+      id: 'fake',
+      complete: () => new Promise((resolve) => { setTimeout(() => resolve(OK), 30_000); }),
+    };
+    expect((await run(provider, PHOTO)).allowed).toBe(true);
+  });
+
+  it('таймаут не повторяется: ожидание участника не удваивается', async () => {
+    let n = 0;
+    const provider = {
+      id: 'fake',
+      complete: () => { n++; return new Promise((resolve) => { setTimeout(() => resolve(OK), 90_000); }); },
+    };
+    const v = await run(provider, PHOTO);
+    expect(v.allowed).toBe(false);
+    expect(v.source).toBe('unavailable');
+    expect(n).toBe(1);
+  });
+
+  it('быструю ошибку пробуем ещё раз — это могла быть сетевая икота', async () => {
+    let n = 0;
+    const provider = {
+      id: 'fake',
+      complete: () => {
+        n++;
+        return n === 1 ? Promise.reject(new Error('провайдер: HTTP 500')) : Promise.resolve(OK);
+      },
+    };
+    expect((await run(provider, { stage: 'prompt', text: 'кот на скейте' })).allowed).toBe(true);
+    expect(n).toBe(2);
+  });
+
+  it('сбой проверки попадает в журнал, а не тонет молча', async () => {
+    const warn = vi.fn();
+    const provider = { id: 'fake', complete: () => Promise.reject(new Error('провайдер: HTTP 500')) };
+    const v = await run(provider, { ...PHOTO, log: { warn } });
+    expect(v.allowed).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(3);
+    expect(warn.mock.calls[0]?.[1]).toBe('проверка контента не ответила');
+    expect(String(warn.mock.calls[0]?.[0]?.err)).toContain('HTTP 500');
+  });
+
+  describe('источник решения', () => {
+    // Раньше источник выяснялся сравнением русских фраз («проверка сейчас
+    // недоступна»): от правки текста молча сломались бы и журнал, и ответ
+    // участнику.
+    it('решение классификатора помечено как classifier', async () => {
+      const provider = {
+        id: 'fake',
+        complete: () => Promise.resolve({
+          text: '{"allowed": false, "category": "sexual", "reason": "нельзя"}',
+          toolCalls: [], stopReason: 'end', usage: {},
+        }),
+      };
+      expect((await run(provider, { stage: 'prompt', text: 'что-то' })).source).toBe('classifier');
+    });
+
+    it('недоступность помечена как unavailable, а не как запрет', async () => {
+      const provider = { id: 'fake', complete: () => Promise.reject(new Error('HTTP 500')) };
+      const d = await run(provider, { stage: 'photo', text: 'А что на этой фотке' });
+      expect(d.source).toBe('unavailable');
+      expect(d.category).toBeNull();
+    });
+
+    it('аварийный список помечен как stoplist', async () => {
+      const provider = { id: 'fake', complete: () => Promise.reject(new Error('HTTP 500')) };
+      const d = await run(provider, { stage: 'prompt', text: 'нарисуй свастику' });
+      expect(d.source).toBe('stoplist');
+      expect(d.category).toBe('hate');
+    });
   });
 });
