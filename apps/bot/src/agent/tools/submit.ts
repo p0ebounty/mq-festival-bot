@@ -52,9 +52,24 @@ export async function submitGeneration(
     stage: 'prompt',
     text: [ctx.userMessage, input.finalPrompt].filter(Boolean).join('\n'),
     ...(input.images?.length ? { imageUrls: input.images } : {}),
+    log: ctx.log,
   });
   if (!verdict.allowed) {
-    ctx.log.info({ category: verdict.category }, 'запрос отклонён проверкой');
+    ctx.log.info({ category: verdict.category, source: verdict.source }, 'запрос отклонён проверкой');
+    // Проверка не ответила — это сбой на нашей стороне, а не запрет.
+    // Говорить «такое рисовать нельзя» здесь значит соврать участнику и
+    // отправить его придумывать другую идею вместо простого повтора.
+    if (verdict.source === 'unavailable') {
+      return {
+        ok: false,
+        summary: 'Проверка не ответила — это сбой на нашей стороне, а не запрет.',
+        note:
+          'Скажи КОРОТКО, что у тебя моргнула проверка, и попроси повторить ту же просьбу ' +
+          'через минуту. Не намекай, что идея запрещённая, и не предлагай другую: ' +
+          'она в порядке. Токены не списаны.',
+        error: 'moderation_unavailable',
+      };
+    }
     return {
       ok: false,
       summary: `Такое рисовать нельзя: ${verdict.reason}.`,
