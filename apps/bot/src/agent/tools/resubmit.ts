@@ -37,6 +37,8 @@ export interface FailureDeps {
 export type ResubmitOutcome =
   /** Задача ушла следующей модели, заглушка «Рисую…» остаётся честной. */
   | 'resubmitted'
+  /** Сбой относится не к текущей задаче строки: её уже пересдали или как раз пересдают. */
+  | 'stale_task'
   /** Строку по старому taskId уже забрал кто-то другой (callback или воркер). */
   | 'claimed_elsewhere'
   /** Строку забрали мы, но ни одна запасная модель не приняла задачу. */
@@ -80,17 +82,23 @@ export async function tryResubmit(
   ctx: FailureDeps,
   gen: GenerationRow,
   rec: TaskRecord,
+  failedTaskId: string,
   log: TaskLogger,
 ): Promise<ResubmitOutcome> {
   const generationId = gen.id;
-  const params = readParams(gen.params, generationId, log);
 
+  // Сбой обязан относиться к ТЕКУЩЕЙ задаче строки (см. handleTaskFailure).
+  if (gen.kieTaskId !== failedTaskId) {
+    log.info({ generationId, failedTaskId, current: gen.kieTaskId },
+      'сбой по старой задаче, строка уже пересдана — пропускаем');
+    return 'stale_task';
+  }
+
+  const params = readParams(gen.params, generationId, log);
   if ((params.retries ?? 0) >= MAX_ASYNC_RETRIES) {
     log.info({ generationId, retries: params.retries }, 'лимит пересдач исчерпан');
     return 'not_eligible';
   }
-  // Без taskId забирать нечего: строка уже без задачи, кто-то нас опередил.
-  if (!gen.kieTaskId) return 'not_eligible';
   if (!params.task || !gen.finalPrompt) {
     log.warn({ generationId }, 'в строке нет task или final_prompt — пересдать нельзя');
     return 'not_eligible';
@@ -125,9 +133,9 @@ export async function tryResubmit(
 
   // Атомарный захват по старому taskId: callback и воркер могут увидеть
   // один и тот же fail. Второй строку не найдёт и ничего не сделает.
-  const claimed = await ctx.generations.claimRetry(generationId, gen.kieTaskId, {
+  const claimed = await ctx.generations.claimRetry(generationId, failedTaskId, {
     model: gen.model,
-    taskId: rec.taskId || gen.kieTaskId,
+    taskId: failedTaskId,
     ...(rec.failCode ? { failCode: rec.failCode } : {}),
     ...(rec.failMessage ? { failMessage: rec.failMessage } : {}),
   });
@@ -165,23 +173,42 @@ export async function handleTaskFailure(
   ctx: FailureDeps,
   gen: GenerationRow,
   rec: TaskRecord,
+  failedTaskId: string | null | undefined,
   log: TaskLogger,
 ): Promise<'failed' | 'pending'> {
-  const outcome = await tryResubmit(ctx, gen, rec, log);
-  if (outcome === 'resubmitted' || outcome === 'claimed_elsewhere') return 'pending';
-
-  // После claimRetry строка в статусе pending — markFailed это допускает
-  // (IN_FLIGHT). Причина — исходная от kie.ai, а не отказ запасных моделей:
-  // именно её увидит участник и админка.
-  const changed = await ctx.generations.markFailed(gen.id, rec.failCode, rec.failMessage);
-  if (changed) {
-    log.warn({ generationId: gen.id, fail: rec.failMessage }, 'генерация не удалась');
-    // Токены возвращаем: участник не виноват, что модель не справилась.
-    if (gen.tokensCharged) {
-      await ctx.tokens.grant(gen.userId, gen.tokensCharged, { reason: 'refund', generationId: gen.id });
-    }
-    void ctx.deliverGeneration?.(gen.id).catch((e: unknown) =>
-      log.warn({ generationId: gen.id, err: String(e) }, 'сообщение о сбое не доставлено'));
+  // Сначала — к той ли задаче относится сбой. Воркер берёт снимок строки
+  // до пересдачи и может принести fail по СТАРОЙ задаче, когда в строке
+  // уже новая (или ещё никакой — пересдача идёт прямо сейчас). Такой сбой
+  // строки не касается: ни лимит пересдач, ни провал к ней не применимы.
+  if (!failedTaskId || gen.kieTaskId !== failedTaskId) {
+    log.info({ generationId: gen.id, failedTaskId, current: gen.kieTaskId },
+      'сбой по старой задаче, строка уже пересдана — пропускаем');
+    return 'pending';
   }
+
+  const outcome = await tryResubmit(ctx, gen, rec, failedTaskId, log);
+  if (outcome === 'resubmitted' || outcome === 'claimed_elsewhere' || outcome === 'stale_task') {
+    return 'pending';
+  }
+
+  // Провал привязан к задаче, по которой пришёл сбой: после claimRetry
+  // строка наша и без задачи (`null`), иначе — всё ещё с той же задачей.
+  // Если за это время строку кто-то переставил, markFailed вернёт false, и
+  // возвращать токен нам не за что. Причина — исходная от kie.ai, а не отказ
+  // запасных моделей: именно её увидит участник и админка.
+  const changed = await ctx.generations.markFailed(gen.id, rec.failCode, rec.failMessage, {
+    onlyIfTaskId: outcome === 'exhausted' ? null : failedTaskId,
+  });
+  if (!changed) {
+    log.info({ generationId: gen.id }, 'строку уже переставили, провал не наш');
+    return 'pending';
+  }
+  log.warn({ generationId: gen.id, fail: rec.failMessage }, 'генерация не удалась');
+  // Токены возвращаем: участник не виноват, что модель не справилась.
+  if (gen.tokensCharged) {
+    await ctx.tokens.grant(gen.userId, gen.tokensCharged, { reason: 'refund', generationId: gen.id });
+  }
+  void ctx.deliverGeneration?.(gen.id).catch((e: unknown) =>
+    log.warn({ generationId: gen.id, err: String(e) }, 'сообщение о сбое не доставлено'));
   return 'failed';
 }

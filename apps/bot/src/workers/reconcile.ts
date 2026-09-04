@@ -2,6 +2,15 @@ import type { FastifyBaseLogger } from 'fastify';
 import { KieError } from '@mq/core';
 import type { AppContext } from '../context.js';
 import { applyTaskResult } from '../routes/kie-callback.js';
+import { handleTaskFailure } from '../agent/tools/resubmit.js';
+
+/**
+ * Через сколько строка в полёте БЕЗ задачи у kie.ai считается осиротевшей.
+ * Такая строка появляется, если процесс упал между созданием строки (или
+ * захватом под пересдачу) и записью taskId. Постановка с повторами
+ * укладывается в десятки секунд; десять минут — запас, а не оценка.
+ */
+const ORPHAN_AFTER_SEC = 10 * 60;
 
 /**
  * Добор задач, по которым не пришёл callback.
@@ -36,6 +45,8 @@ export function startReconcileWorker(
     if (stopped || running) return;
     running = true;
     try {
+      await closeOrphans(ctx, log, batchSize);
+
       const stale = await ctx.generations.staleInFlight(staleAfterSec, batchSize);
       if (stale.length === 0) return;
 
@@ -51,10 +62,20 @@ export function startReconcileWorker(
           }
         } catch (err) {
           if (err instanceof KieError && !err.retryable) {
-            // Невосстановимо (404/422) — закрываем, иначе задача будет
-            // висеть в опросе вечно.
-            await ctx.generations.markFailed(gen.id, String(err.code), err.message);
-            log.warn({ generationId: gen.id, code: err.code }, 'задача закрыта как безнадёжная');
+            // Невосстановимо (404/422) — иначе задача висела бы в опросе
+            // вечно. Идём тем же путём, что и fail от kie.ai: пересдача,
+            // а если некому — провал с возвратом токена и сообщением
+            // участнику. Раньше здесь был голый markFailed: токен не
+            // возвращался, заглушка «Рисую…» оставалась висеть.
+            const row = await ctx.generations.byId(gen.id);
+            if (row) {
+              const rec = {
+                taskId: gen.kieTaskId, model: gen.model, state: 'fail' as const, resultUrls: [],
+                failCode: String(err.code), failMessage: err.message,
+              };
+              const outcome = await handleTaskFailure(ctx, row, rec, gen.kieTaskId, log);
+              log.warn({ generationId: gen.id, code: err.code, outcome }, 'задача у kie.ai безнадёжна');
+            }
           } else {
             log.warn({ generationId: gen.id, err: String(err) }, 'добор не удался, повторим позже');
           }
@@ -77,4 +98,25 @@ export function startReconcileWorker(
       clearInterval(timer);
     },
   };
+}
+
+/**
+ * Закрывает осиротевшие строки: в полёте, без задачи у kie.ai, старше
+ * порога. Провал привязан к «задачи всё ещё нет» (`onlyIfTaskId: null`) —
+ * если постановка всё-таки успела записать taskId, строка не наша.
+ */
+async function closeOrphans(ctx: AppContext, log: FastifyBaseLogger, limit: number): Promise<void> {
+  const orphans = await ctx.generations.orphanedInFlight(ORPHAN_AFTER_SEC, limit);
+  for (const gen of orphans) {
+    const changed = await ctx.generations.markFailed(
+      gen.id, 'orphaned', 'задача потеряна между постановкой и записью', { onlyIfTaskId: null },
+    );
+    if (!changed) continue;
+    log.warn({ generationId: gen.id, createdAt: gen.createdAt }, 'осиротевшая генерация закрыта');
+    if (gen.tokensCharged) {
+      await ctx.tokens.grant(gen.userId, gen.tokensCharged, { reason: 'refund', generationId: gen.id });
+    }
+    void ctx.deliverGeneration?.(gen.id).catch((e: unknown) =>
+      log.warn({ generationId: gen.id, err: String(e) }, 'сообщение о сбое не доставлено'));
+  }
 }

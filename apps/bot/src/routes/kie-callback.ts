@@ -81,7 +81,7 @@ export async function applyTaskResult(
   generationId: string,
   rec: ReturnType<typeof parseTaskRecord>,
   log: Logger,
-  gen?: { createdAt?: Date },
+  gen?: { createdAt?: Date; kieTaskId?: string | null },
 ): Promise<'success' | 'failed' | 'pending'> {
   if (rec.state === 'generating' || rec.state === 'waiting' || rec.state === 'queuing') {
     await ctx.generations.markGenerating(generationId);
@@ -97,7 +97,11 @@ export async function applyTaskResult(
       log.warn({ generationId }, 'kie.ai вернул fail по строке, которой нет');
       return 'failed';
     }
-    return handleTaskFailure(ctx, row, rec, log);
+    // По какой задаче пришёл сбой: у callback это taskId из тела (он же в
+    // снимке строки), у воркера — taskId из снимка до опроса. Свежая строка
+    // может уже смотреть на другую задачу — это решает handleTaskFailure.
+    const failedTaskId = gen?.kieTaskId ?? (rec.taskId || undefined);
+    return handleTaskFailure(ctx, row, rec, failedTaskId, log);
   }
 
   const url = rec.resultUrls[0];

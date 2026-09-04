@@ -43,3 +43,6 @@ playwright-report/
 # крупные артефакты замеров моделей (результаты — в .md)
 docs/experiments/assets/
 docs/experiments/bench-raw.json
+
+# Рабочие деревья агентов Claude Code (isolation: worktree)
+.claude/worktrees/

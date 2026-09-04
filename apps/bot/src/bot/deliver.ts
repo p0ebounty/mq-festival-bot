@@ -30,8 +30,17 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
       if (cardId !== undefined) {
         await bot.api.deleteMessage(chatId, cardId).catch(() => {});
       }
-      await bot.api.sendMessage(chatId, failureText(gen.failMessage))
+      const text = failureText(gen.failMessage);
+      await bot.api.sendMessage(chatId, text)
         .catch((e: unknown) => log.warn({ generationId, err: String(e) }, 'не смог отправить сообщение о сбое'));
+      // Сообщение о сбое попадает и в историю диалога. Иначе следующее
+      // «ещё раз» участника приходит модели без знания, что картинки не
+      // было: в её истории последняя реплика — собственное «Добавил», и
+      // правило «не вызывай инструмент снова» блокирует переделку.
+      if (gen.conversationId) {
+        await app.conversations.addMessage({ conversationId: gen.conversationId, role: 'assistant', text })
+          .catch((e: unknown) => log.warn({ generationId, err: String(e) }, 'сообщение о сбое не записалось в историю'));
+      }
       return;
     }
 
@@ -106,7 +115,7 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
 function failureText(failMessage: string | null): string {
   const policy = /policy|prohibited|filtered|violat/i.test(failMessage ?? '');
   return policy
-    ? 'Эту картинку модель рисовать отказалась — так бывает с известными персонажами ' +
-      'и защищённой авторским правом натурой. Токены вернул. Давай придумаем что-нибудь своё?'
+    ? 'Эту картинку генератор рисовать не стал — с реальными людьми и известными героями он ' +
+      'осторожнее меня. Токены вернул. Попробуй другую идею или скажи, что ещё поменять.'
     : 'Не получилось нарисовать — картинка не вышла. Токены вернул, попробуй сформулировать чуть иначе.';
 }
