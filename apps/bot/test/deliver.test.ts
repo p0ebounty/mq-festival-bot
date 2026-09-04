@@ -26,8 +26,19 @@ beforeAll(() => {
 
 interface Sent { method: string; args: unknown[] }
 
-function harness(opts: { status?: string; editFails?: boolean } = {}) {
+interface HarnessOpts {
+  status?: string;
+  editFails?: boolean;
+  /** Чем kie.ai объяснил провал — от этого зависит текст участнику. */
+  failMessage?: string | null;
+  /** null — генерация без диалога (например, из админки). */
+  conversationId?: string | null;
+}
+
+function harness(opts: HarnessOpts = {}) {
   const sent: Sent[] = [];
+  /** Что записали в историю диалога. */
+  const history: Array<{ conversationId: string; role: string; text?: string | null }> = [];
   const rec = (method: string) => (...args: unknown[]) => {
     sent.push({ method, args });
     if (method === 'editMessageMedia' && opts.editFails) throw new Error('message can\'t be edited');
@@ -43,8 +54,15 @@ function harness(opts: { status?: string; editFails?: boolean } = {}) {
         status: opts.status ?? 'success',
         outputMediaId: 'm1',
         caption: 'Твой кот в шляпе',
-        failMessage: null,
+        failMessage: opts.failMessage ?? null,
+        conversationId: opts.conversationId === undefined ? 'c1' : opts.conversationId,
       }),
+    },
+    conversations: {
+      addMessage: async (input: { conversationId: string; role: string; text?: string | null }) => {
+        history.push(input);
+        return { id: 'm-fail' };
+      },
     },
     media: { byId: async () => ({ id: 'm1', path: 'p.jpg', bytes: 10 }) },
     storage: { read: async () => Buffer.from('picture-bytes') },
@@ -62,7 +80,7 @@ function harness(opts: { status?: string; editFails?: boolean } = {}) {
   };
 
   const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
-  return { app, bot, log, sent };
+  return { app, bot, log, sent, history };
 }
 
 const load = async () => (await import('../src/bot/deliver.js')).makeDeliverer;
@@ -129,5 +147,67 @@ describe('доставка результата', () => {
     expect(h.sent.some((s) => s.method === 'deleteMessage')).toBe(true);
     expect(h.sent.some((s) => s.method === 'sendMessage')).toBe(true);
     expect(h.sent.some((s) => s.method === 'sendPhoto')).toBe(false);
+  });
+});
+
+/**
+ * Живой случай 04.09: «добавь человека паука» → kie.ai через 108 с вернул
+ * fail, участнику ушло «не получилось». В истории диалога при этом
+ * последней репликой бота осталось «Добавил» — и на следующее «ещё раз»
+ * модель отвечала из мира, где картинка уже есть, а правило «не вызывай
+ * инструмент снова» блокировало переделку. Сообщение о сбое обязано
+ * попадать в ту же историю, что читает модель.
+ */
+describe('сообщение о сбое и история диалога', () => {
+  const textOf = (call: Sent) => call.args[1] as string;
+
+  it('текст сбоя уходит участнику и тем же текстом ложится в историю', async () => {
+    const h = harness({ status: 'failed' });
+    await (await load())(h.app, h.bot as never, h.log as never)('g1');
+
+    const msg = h.sent.find((s) => s.method === 'sendMessage');
+    expect(msg).toBeDefined();
+    expect(h.history).toHaveLength(1);
+    expect(h.history[0]).toMatchObject({ conversationId: 'c1', role: 'assistant', text: textOf(msg!) });
+  });
+
+  it('без диалога в историю ничего не пишется', async () => {
+    // Генерация может прийти не из чата — записывать её сбой некуда.
+    const h = harness({ status: 'failed', conversationId: null });
+    await (await load())(h.app, h.bot as never, h.log as never)('g1');
+    expect(h.sent.some((s) => s.method === 'sendMessage')).toBe(true);
+    expect(h.history).toHaveLength(0);
+  });
+
+  it('возвращённый токен тоже попадает в историю', async () => {
+    // Статус refunded — та же ветка неудачи, что и failed.
+    const h = harness({ status: 'refunded' });
+    await (await load())(h.app, h.bot as never, h.log as never)('g1');
+    expect(h.history).toHaveLength(1);
+    expect(h.history[0]?.role).toBe('assistant');
+  });
+
+  it('отказ генератора по контенту объясняется без запугивания', async () => {
+    // Прежний текст «так бывает с известными персонажами» пугал участника
+    // от Человека-паука, которого рисовать можно. Новый ведёт к выходу:
+    // описать человека словами, без имени.
+    const h = harness({ status: 'failed', failMessage: 'content policy violation' });
+    await (await load())(h.app, h.bot as never, h.log as never)('g1');
+
+    const text = textOf(h.sent.find((s) => s.method === 'sendMessage')!);
+    expect(text).toContain('осторожнее меня');
+    expect(text).toContain('Токены вернул');
+    expect(text).not.toContain('известными персонажами');
+    // Совет «опиши без имени» учил бы обходить фильтр — его здесь нет.
+    expect(text).not.toContain('без имени');
+  });
+
+  it('технический сбой не притворяется отказом по контенту', async () => {
+    const h = harness({ status: 'failed', failMessage: 'generate task timeout' });
+    await (await load())(h.app, h.bot as never, h.log as never)('g1');
+
+    const text = textOf(h.sent.find((s) => s.method === 'sendMessage')!);
+    expect(text).not.toContain('осторожнее меня');
+    expect(text).toContain('Токены вернул');
   });
 });

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { Db } from '../index';
 import { generations, media } from '../schema';
 
@@ -64,9 +64,15 @@ export function generationsRepo(db: Db) {
      * `tried` — каким моделям задача уже предлагалась; мержится в params
      * через jsonb `||`, а не перезаписывает их: там уже лежат aspectRatio,
      * task, chain и images, нужные для пересдачи.
+     *
+     * Условие «pending и без задачи» — защита от оживления закрытой строки:
+     * пока createTask ходил в kie.ai, строку мог закрыть другой путь (сбой
+     * по старой задаче, добор осиротевших). Возвращает false, если строка
+     * уже не наша — тогда задача у kie.ai остаётся без хозяина, и об этом
+     * надо громко написать в лог, а не ставить следующую.
      */
-    async markSubmitted(id: string, kieTaskId: string, model: string, tried?: string[]) {
-      await db.update(generations)
+    async markSubmitted(id: string, kieTaskId: string, model: string, tried?: string[]): Promise<boolean> {
+      const res = await db.update(generations)
         .set({
           status: 'submitted',
           kieTaskId,
@@ -75,7 +81,13 @@ export function generationsRepo(db: Db) {
             ? { params: sql`coalesce(${generations.params}, '{}'::jsonb) || ${JSON.stringify({ tried })}::jsonb` }
             : {}),
         })
-        .where(eq(generations.id, id));
+        .where(and(
+          eq(generations.id, id),
+          eq(generations.status, 'pending'),
+          isNull(generations.kieTaskId),
+        ))
+        .returning({ id: generations.id });
+      return res.length > 0;
     },
 
     /**
@@ -151,7 +163,26 @@ export function generationsRepo(db: Db) {
       return res.length > 0;
     },
 
-    async markFailed(id: string, failCode: string | undefined, failMessage: string | undefined) {
+    /**
+     * Закрывает задачу провалом. Идемпотентно: только из статусов в полёте.
+     *
+     * `onlyIfTaskId` привязывает провал к конкретной задаче kie.ai: строка
+     * закрывается, только если её `kie_task_id` всё ещё тот же (или всё ещё
+     * пуст при `null`). Без этого устаревший fail по старой задаче — от
+     * воркера, который взял снимок строки до пересдачи, — закрывал уже
+     * пересданную генерацию, а через минуту приходила её картинка.
+     */
+    async markFailed(
+      id: string,
+      failCode: string | undefined,
+      failMessage: string | undefined,
+      opts: { onlyIfTaskId?: string | null } = {},
+    ) {
+      const taskGuard = opts.onlyIfTaskId === undefined
+        ? undefined
+        : opts.onlyIfTaskId === null
+          ? isNull(generations.kieTaskId)
+          : eq(generations.kieTaskId, opts.onlyIfTaskId);
       const res = await db.update(generations)
         .set({
           status: 'failed',
@@ -159,7 +190,7 @@ export function generationsRepo(db: Db) {
           ...(failCode ? { failCode } : {}),
           ...(failMessage ? { failMessage } : {}),
         })
-        .where(and(eq(generations.id, id), inArray(generations.status, IN_FLIGHT)))
+        .where(and(eq(generations.id, id), inArray(generations.status, IN_FLIGHT), taskGuard))
         .returning({ id: generations.id });
       return res.length > 0;
     },
@@ -180,6 +211,24 @@ export function generationsRepo(db: Db) {
         .where(and(
           inArray(generations.status, IN_FLIGHT),
           sql`${generations.kieTaskId} is not null`,
+          lt(generations.createdAt, new Date(Date.now() - olderThanSec * 1000)),
+        ))
+        .limit(limit);
+    },
+
+    /**
+     * Строки в полёте БЕЗ задачи у kie.ai: процесс упал между созданием
+     * строки (или захватом под пересдачу) и записью taskId. В `staleInFlight`
+     * они не попадают, воркер их не видит, а `activeCountForUser` считает
+     * активными — участник до конца смены слышал бы «у тебя уже готовится
+     * другая картинка». Порог берётся с большим запасом: постановка с
+     * повторами укладывается в десятки секунд, не в минуты.
+     */
+    async orphanedInFlight(olderThanSec: number, limit = 20) {
+      return db.select().from(generations)
+        .where(and(
+          inArray(generations.status, IN_FLIGHT),
+          isNull(generations.kieTaskId),
           lt(generations.createdAt, new Date(Date.now() - olderThanSec * 1000)),
         ))
         .limit(limit);

@@ -101,6 +101,31 @@ describe('провайдер Responses API', () => {
     expect(r.usage).toEqual({ inputTokens: 5, outputTokens: 2 });
   });
 
+  it('одинаковая реплика двумя сообщениями подряд отдаётся один раз', async () => {
+    // Живой случай 04.09: kie.ai/gpt-5-5 прислал отказ с предложением замены
+    // дважды, и участник читал «…Делаю?Настоящих людей… не рисую…».
+    const same = 'Настоящих людей не рисую. Могу изобретателя с ракетой. Делаю?';
+    const r = await mk(vi.fn().mockImplementation(() => Promise.resolve(sse({
+      status: 'completed',
+      output: [
+        { type: 'message', content: [{ type: 'output_text', text: same }] },
+        { type: 'message', content: [{ type: 'output_text', text: same }] },
+      ],
+    }))) as never).complete({ system: 's', messages: [{ role: 'user', text: 'добавь маска' }], tools: [] });
+    expect(r.text).toBe(same);
+  });
+
+  it('разные части текста по-прежнему склеиваются', async () => {
+    const r = await mk(vi.fn().mockImplementation(() => Promise.resolve(sse({
+      status: 'completed',
+      output: [
+        { type: 'message', content: [{ type: 'output_text', text: 'Раз. ' }] },
+        { type: 'message', content: [{ type: 'output_text', text: 'Два.' }] },
+      ],
+    }))) as never).complete({ system: 's', messages: [{ role: 'user', text: 'x' }], tools: [] });
+    expect(r.text).toBe('Раз.Два.');
+  });
+
   it('читает вызов инструмента', async () => {
     const r = await mk(vi.fn().mockImplementation(() => Promise.resolve(sse({
       status: 'completed',

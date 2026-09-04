@@ -151,11 +151,19 @@ export class ResponsesApiProvider implements ChatProvider {
         return { id: o.call_id ?? o.id ?? `call_${o.name}`, name: o.name!, input };
       });
 
-    const text = items
+    // Части текста склеиваются без разделителя, как их отдаёт API. Но
+    // gpt-5-5 у kie.ai иногда присылает одну и ту же реплику двумя
+    // сообщениями подряд (замечено 04.09 на отказе с кнопкой «Давай»):
+    // участник видел «…Делаю?Настоящих людей… не рисую…». Повтор соседней
+    // части — не содержание, а сбой формата, его отбрасываем.
+    const parts = items
       .filter((o) => o.type === 'message')
       .flatMap((o) => o.content ?? [])
       .filter((c) => c.type === 'output_text')
-      .map((c) => c.text ?? '')
+      .map((c) => (c.text ?? '').trim())
+      .filter((t) => t.length > 0);
+    const text = parts
+      .filter((t, i) => i === 0 || t !== parts[i - 1])
       .join('')
       .trim();
 

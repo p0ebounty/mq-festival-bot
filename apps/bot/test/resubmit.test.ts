@@ -47,6 +47,12 @@ interface HarnessOpts {
   /** Что делает createTask: список taskId по вызовам либо отказ на всех. */
   createTask?: 'accept' | 'reject';
   model?: string;
+  /** Какая задача сейчас в строке (null — пересдача идёт прямо сейчас). */
+  kieTaskId?: string | null;
+  /** Что отвечает markSubmitted: false — строку успели закрыть. */
+  markSubmitted?: boolean;
+  /** Что отвечает markFailed: false — строку кто-то переставил. */
+  markFailed?: boolean;
 }
 
 function harness(opts: HarnessOpts = {}) {
@@ -55,7 +61,7 @@ function harness(opts: HarnessOpts = {}) {
     userId: 'u1',
     status: 'generating',
     kind: 'world',
-    kieTaskId: 't-old',
+    kieTaskId: opts.kieTaskId === undefined ? 't-old' : opts.kieTaskId,
     model: opts.model ?? 'nano-banana-2',
     userPrompt: 'добавь человека паука',
     finalPrompt: PROMPT,
@@ -86,8 +92,8 @@ function harness(opts: HarnessOpts = {}) {
   const generations = {
     byId: vi.fn(async () => row),
     claimRetry: vi.fn(async () => opts.claim ?? true),
-    markSubmitted: vi.fn(async () => undefined),
-    markFailed: vi.fn(async () => true),
+    markSubmitted: vi.fn(async () => opts.markSubmitted ?? true),
+    markFailed: vi.fn(async () => opts.markFailed ?? true),
     markGenerating: vi.fn(async () => undefined),
   };
   const tokens = { grant: vi.fn(async () => 10) };
@@ -148,7 +154,8 @@ describe('пересдача генерации другой модели при
     expect(outcome).toBe('failed');
     expect(h.createTask).not.toHaveBeenCalled();
     expect(h.generations.claimRetry).not.toHaveBeenCalled();
-    expect(h.generations.markFailed).toHaveBeenCalledWith('g1', '524', 'generate task timeout');
+    // Провал привязан к задаче, по которой пришёл сбой.
+    expect(h.generations.markFailed).toHaveBeenCalledWith('g1', '524', 'generate task timeout', { onlyIfTaskId: 't-old' });
     expect(h.tokens.grant).toHaveBeenCalledWith('u1', 1, { reason: 'refund', generationId: 'g1' });
     expect(h.deliverGeneration).toHaveBeenCalledWith('g1');
   });
@@ -175,7 +182,8 @@ describe('пересдача генерации другой модели при
     expect(h.createTask).toHaveBeenCalledTimes(2);
     expect(h.generations.markSubmitted).not.toHaveBeenCalled();
     // Причина — 524 от kie.ai, а не 429 запасных: её увидит участник и админка.
-    expect(h.generations.markFailed).toHaveBeenCalledWith('g1', '524', 'generate task timeout');
+    // После claimRetry строка наша и без задачи — провал привязан к этому.
+    expect(h.generations.markFailed).toHaveBeenCalledWith('g1', '524', 'generate task timeout', { onlyIfTaskId: null });
     expect(h.tokens.grant).toHaveBeenCalledWith('u1', 1, { reason: 'refund', generationId: 'g1' });
     expect(h.deliverGeneration).toHaveBeenCalledWith('g1');
   });
@@ -225,9 +233,57 @@ describe('пересдача генерации другой модели при
     expect(outcome).toBe('failed');
     expect(h.generations.claimRetry).not.toHaveBeenCalled();
     expect(h.createTask).not.toHaveBeenCalled();
-    expect(h.generations.markFailed).toHaveBeenCalledWith('g1', '524', 'generate task timeout');
+    expect(h.generations.markFailed).toHaveBeenCalledWith('g1', '524', 'generate task timeout', { onlyIfTaskId: 't-old' });
     expect(h.tokens.grant).toHaveBeenCalledWith('u1', 1, { reason: 'refund', generationId: 'g1' });
     expect(h.deliverGeneration).toHaveBeenCalledWith('g1');
+  });
+
+  it('(g) fail по СТАРОЙ задаче, когда в строке уже новая — не трогаем ничего', async () => {
+    // Воркер взял снимок строки с t-old до пересдачи, а callback уже поставил t-new.
+    const h = harness({ kieTaskId: 't-new-9', params: { aspectRatio: '1:1', task: 'transform_world', images: [SOURCE], tried: ['nano-banana-2', 'gpt-image-2-i2i'], retries: 1 } });
+    const outcome = await (await load())(h.ctx, 'g1', failRecord, h.log);
+
+    expect(outcome).toBe('pending');
+    expect(h.generations.claimRetry).not.toHaveBeenCalled();
+    expect(h.generations.markFailed).not.toHaveBeenCalled();
+    expect(h.tokens.grant).not.toHaveBeenCalled();
+    expect(h.deliverGeneration).not.toHaveBeenCalled();
+  });
+
+  it('(h) fail пришёл, пока пересдача идёт (задачи в строке нет) — не провал', async () => {
+    const h = harness({ kieTaskId: null, params: { aspectRatio: '1:1', task: 'transform_world', images: [SOURCE], tried: ['nano-banana-2'], retries: 1 } });
+    const outcome = await (await load())(h.ctx, 'g1', failRecord, h.log);
+
+    expect(outcome).toBe('pending');
+    expect(h.generations.markFailed).not.toHaveBeenCalled();
+    expect(h.tokens.grant).not.toHaveBeenCalled();
+  });
+
+  it('(i) markFailed не прошёл — строку переставили, токен не возвращаем', async () => {
+    const h = harness({ markFailed: false, params: { aspectRatio: '1:1', task: 'transform_world', images: [SOURCE], tried: ['nano-banana-2'], retries: 1 } });
+    const outcome = await (await load())(h.ctx, 'g1', failRecord, h.log);
+
+    expect(outcome).toBe('pending');
+    expect(h.generations.markFailed).toHaveBeenCalledTimes(1);
+    expect(h.tokens.grant).not.toHaveBeenCalled();
+    expect(h.deliverGeneration).not.toHaveBeenCalled();
+  });
+
+  it('(j) строку закрыли, пока задача ставилась — вторую модель не пробуем', async () => {
+    const h = harness({ markSubmitted: false, markFailed: false });
+    const outcome = await (await load())(h.ctx, 'g1', failRecord, h.log);
+
+    // Задача у kie.ai создана один раз и осталась без хозяина — в логе, не в БД.
+    expect(h.createTask).toHaveBeenCalledTimes(1);
+    expect(h.generations.markSubmitted).toHaveBeenCalledTimes(1);
+    expect(h.log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ generationId: 'g1', taskId: 't-new-1' }),
+      'строка закрыта до записи задачи, задача у kie.ai осталась без хозяина',
+    );
+    // Провал привязан к «задачи нет» — не прошёл, значит не наш, без возврата.
+    expect(h.generations.markFailed).toHaveBeenCalledWith('g1', '524', 'generate task timeout', { onlyIfTaskId: null });
+    expect(h.tokens.grant).not.toHaveBeenCalled();
+    expect(outcome).toBe('pending');
   });
 
   it('пересдаётся и отказ по контенту, а не только таймаут', async () => {

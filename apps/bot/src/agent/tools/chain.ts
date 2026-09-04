@@ -50,16 +50,26 @@ export async function submitToChain(
   let lastError = '';
   for (const model of candidates) {
     tried.push(model.id);
+    let taskId: string;
     try {
-      const payload = buildCreateTask(model, req, `${env.PUBLIC_URL}/hooks/kie`);
-      const taskId = await deps.kie.createTask(payload);
-      await deps.generations.markSubmitted(generationId, taskId, model.kieModel, tried);
-      return { placed: { model, taskId }, tried, lastError };
+      taskId = await deps.kie.createTask(buildCreateTask(model, req, `${env.PUBLIC_URL}/hooks/kie`));
     } catch (err) {
       lastError = err instanceof KieError ? err.message : String(err);
       log.warn({ generationId, model: model.id, err: lastError },
         'модель не приняла задачу, пробуем следующую');
+      continue;
     }
+    // Запись taskId — вне try выше: ошибка БД здесь не «модель не приняла»,
+    // и ставить вторую задачу у kie.ai на ту же генерацию нельзя.
+    const ours = await deps.generations.markSubmitted(generationId, taskId, model.kieModel, tried);
+    if (!ours) {
+      // Строку успели закрыть, пока задача ставилась. Задача у kie.ai уже
+      // создана и останется без хозяина — фиксируем taskId для разбора.
+      log.warn({ generationId, model: model.id, taskId },
+        'строка закрыта до записи задачи, задача у kie.ai осталась без хозяина');
+      return { placed: null, tried, lastError: 'row_closed' };
+    }
+    return { placed: { model, taskId }, tried, lastError };
   }
   return { placed: null, tried, lastError };
 }
