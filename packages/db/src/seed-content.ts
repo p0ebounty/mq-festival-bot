@@ -167,6 +167,14 @@ export const BASE_WORLDS: ReadonlyArray<{ title: string; prompt: string }> = [
  * ⚠️ Задания №6, №7 и №10 в исходном наборе были цепочками из трёх-четырёх
  * превращений. Сведены к одному шагу по решению заказчика: одна картинка —
  * одно задание — один промпт.
+ *
+ * ⚠️ Набор сверен со списком заказчика от 04.09 — это эталон, по нему
+ * жюри проверяет работы, поэтому формулировки должны совпадать дословно.
+ * Тогда же «рынок сквозь века» заменён на «школа сквозь время», а у
+ * каравеллы убрана подсказка из текста: старая формулировка называла
+ * ответ («атомный ледокол»), чего задание делать не должно.
+ * Переименования старых строк в базе делает миграция 0018, картинки
+ * при этом не перерисовываются.
  */
 export const TASKS: ReadonlyArray<{ title: string; prompt: string; task: string }> = [
   {
@@ -189,7 +197,7 @@ export const TASKS: ReadonlyArray<{ title: string; prompt: string; task: string 
     task: 'Замени гонца на то, чем письма доставляют сегодня.',
   },
   {
-    title: 'рыцарь → герой будущего',
+    title: 'рыцарь → боевой робот',
     prompt: 'A knight in steel plate armour with a sword and shield stands on the field after ' +
       'the battle, banners and drifting smoke, cinematic illustration',
     task: 'Поставь на его место героя из будущего.',
@@ -201,16 +209,16 @@ export const TASKS: ReadonlyArray<{ title: string; prompt: string; task: string 
     task: 'Замени замок на здание, где сегодня сидит власть. Деревню не трогай.',
   },
   {
-    title: 'мастерская → производство без людей',
+    title: 'мастерская → робозавод',
     prompt: 'A craftsman in his workshop forges a horseshoe by hand with a hammer at the forge, ' +
       'an apprentice works the bellows, warm firelight, detailed illustration',
-    task: 'Замени ручную кузницу на производство, где вообще нет людей.',
+    task: 'Замени мастера и его молот на цех, где всю работу делают роботы.',
   },
   {
     title: 'каравелла → атомный ледокол',
     prompt: 'A wooden caravel under white sails in the open ocean, sailors on the yards, ' +
       'seagulls, horizon line, realistic illustration',
-    task: 'Пусть этот океан пересечёт атомный ледокол вместо каравеллы.',
+    task: 'Замени каравеллу на самое мощное судно наших дней.',
   },
   {
     title: 'библиотека → дата-центр',
@@ -225,9 +233,10 @@ export const TASKS: ReadonlyArray<{ title: string; prompt: string; task: string 
     task: 'Добавь на эту ярмарку два предмета из нашего времени. Какие — решай сам.',
   },
   {
-    title: 'рынок сквозь века',
-    prompt: 'A market square of the ancient world, traders with clay amphorae, ox carts, ' +
-      'stone stalls under awnings, bright sunny day, detailed realistic illustration',
-    task: 'Перенеси этот рынок в 2050 год.',
+    title: 'школа сквозь время',
+    prompt: 'A lesson in ancient Greece, students writing with styluses on wax tablets, ' +
+      'a philosopher in a toga under the columns, sunlit courtyard, ' +
+      'detailed realistic illustration',
+    task: 'Перенеси этот урок в 2050 год. Учителя и учеников оставь на месте.',
   },
 ];
