@@ -23,6 +23,8 @@ export interface CreateGenerationInput {
   sourceUrl?: string;
   /** По какому заданию сделана работа, если правилась картинка задания. */
   taskId?: string;
+  /** Из какого стартового мира выросла работа, если правился мир. */
+  worldId?: string;
   tgChatId?: bigint;
   caption?: string;
 }
@@ -44,6 +46,7 @@ export function generationsRepo(db: Db) {
         ...(input.conversationId ? { conversationId: input.conversationId } : {}),
         ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
         ...(input.taskId ? { taskId: input.taskId } : {}),
+        ...(input.worldId ? { worldId: input.worldId } : {}),
         ...(input.tgChatId !== undefined ? { tgChatId: input.tgChatId } : {}),
         ...(input.caption ? { caption: input.caption } : {}),
       }).returning();
@@ -149,6 +152,8 @@ export function generationsRepo(db: Db) {
         // По какому заданию сделана работа. Наследуется по цепочке правок:
         // потомок картинки задания остаётся работой по тому же заданию.
         taskId: generations.taskId,
+        // Из какого стартового мира — наследуется так же по цепочке.
+        worldId: generations.worldId,
         at: generations.completedAt,
       })
         .from(generations)

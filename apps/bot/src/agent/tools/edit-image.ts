@@ -115,6 +115,9 @@ export function makeEditImageTool(app: AppContext): AgentTool<z.infer<typeof inp
         // самой выданной основы, и от любой правки в её цепочке. Отдельного
         // состояния «задание идёт» у участника нет (ADR 0013).
         taskId: picked.taskId,
+        // Мир — тем же порядком: связь наследуется от картинки, которую
+        // правят, поэтому вся цепочка остаётся работой по тому же миру.
+        worldId: picked.worldId,
         userPrompt: ctx.userMessage,
         finalPrompt: buildEditPrompt({ change: args.change }),
         aspectRatio: args.aspect_ratio ?? DEFAULT_ASPECT.free,
