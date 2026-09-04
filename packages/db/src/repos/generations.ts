@@ -59,11 +59,62 @@ export function generationsRepo(db: Db) {
         .where(eq(generations.id, id));
     },
 
-    /** Помечает задачу отправленной и запоминает taskId от kie.ai. */
-    async markSubmitted(id: string, kieTaskId: string, model: string) {
+    /**
+     * Помечает задачу отправленной и запоминает taskId от kie.ai.
+     * `tried` — каким моделям задача уже предлагалась; мержится в params
+     * через jsonb `||`, а не перезаписывает их: там уже лежат aspectRatio,
+     * task, chain и images, нужные для пересдачи.
+     */
+    async markSubmitted(id: string, kieTaskId: string, model: string, tried?: string[]) {
       await db.update(generations)
-        .set({ status: 'submitted', kieTaskId, model })
+        .set({
+          status: 'submitted',
+          kieTaskId,
+          model,
+          ...(tried
+            ? { params: sql`coalesce(${generations.params}, '{}'::jsonb) || ${JSON.stringify({ tried })}::jsonb` }
+            : {}),
+        })
         .where(eq(generations.id, id));
+    },
+
+    /**
+     * Забирает упавшую задачу под пересдачу другой модели. АТОМАРНО, одним
+     * UPDATE: строка возвращается в pending, kie_task_id обнуляется, в
+     * params.attempts дописывается провалившаяся попытка, params.retries
+     * растёт на единицу.
+     *
+     * Условие по СТАРОМУ taskId — защита от гонки: один и тот же fail могут
+     * увидеть и callback, и воркер добора. Второй строку по старому taskId
+     * уже не найдёт и ничего не сделает. Обнулённый kie_task_id заодно
+     * выводит строку из staleInFlight до новой постановки.
+     * Возвращает true, только если захват удался.
+     */
+    async claimRetry(
+      id: string,
+      oldTaskId: string,
+      failure: { model: string; taskId: string; failCode?: string; failMessage?: string },
+    ): Promise<boolean> {
+      const attempt = JSON.stringify({ ...failure, at: new Date().toISOString() });
+      const res = await db.update(generations)
+        .set({
+          status: 'pending',
+          kieTaskId: null,
+          params: sql`jsonb_set(
+            coalesce(${generations.params}, '{}'::jsonb)
+              || jsonb_build_object('retries', coalesce((${generations.params}->>'retries')::int, 0) + 1),
+            '{attempts}',
+            coalesce(${generations.params}->'attempts', '[]'::jsonb) || ${attempt}::jsonb,
+            true
+          )`,
+        })
+        .where(and(
+          eq(generations.id, id),
+          eq(generations.kieTaskId, oldTaskId),
+          inArray(generations.status, IN_FLIGHT),
+        ))
+        .returning({ id: generations.id });
+      return res.length > 0;
     },
 
     byId(id: string) {

@@ -5,6 +5,7 @@ import {
 } from '@mq/core';
 import type { AppContext } from '../context.js';
 import { env } from '../env.js';
+import { handleTaskFailure } from '../agent/tools/resubmit.js';
 
 /**
  * Приём callback от kie.ai о завершении генерации.
@@ -88,17 +89,15 @@ export async function applyTaskResult(
   }
 
   if (rec.state === 'fail') {
-    const changed = await ctx.generations.markFailed(generationId, rec.failCode, rec.failMessage);
-    if (changed) {
-      log.warn({ generationId, fail: rec.failMessage }, 'генерация не удалась');
-      // Токены возвращаем: участник не виноват, что модель не справилась.
-      const gen = await ctx.generations.byId(generationId);
-      if (gen?.tokensCharged) {
-        await ctx.tokens.grant(gen.userId, gen.tokensCharged, { reason: 'refund', generationId });
-      }
-      void ctx.deliverGeneration?.(generationId).catch(() => {});
+    // Сбой после постановки — ещё не провал: сначала задачу предлагают
+    // следующей модели цепочки, и только если пересдать некому — провал,
+    // возврат токенов и сообщение участнику (ADR 0006, дополнение 04.09).
+    const row = await ctx.generations.byId(generationId);
+    if (!row) {
+      log.warn({ generationId }, 'kie.ai вернул fail по строке, которой нет');
+      return 'failed';
     }
-    return 'failed';
+    return handleTaskFailure(ctx, row, rec, log);
   }
 
   const url = rec.resultUrls[0];

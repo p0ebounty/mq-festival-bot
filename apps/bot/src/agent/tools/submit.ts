@@ -1,7 +1,7 @@
-import { buildCreateTask, planModels, KieError, type ImageTask, type AspectRatio, type ToolResult, type ToolContext } from '@mq/core';
+import { planModels, type ImageTask, type AspectRatio, type ToolResult, type ToolContext } from '@mq/core';
+import { submitToChain } from './chain.js';
 import type { AppContext } from '../../context.js';
 import { moderate } from '../../moderation/index.js';
-import { env } from '../../env.js';
 
 export interface SubmitInput {
   task: ImageTask;
@@ -123,7 +123,16 @@ export async function submitGeneration(
     userPrompt: input.userPrompt,
     finalPrompt: input.finalPrompt,
     model: chain[0]!.id,
-    params: { aspectRatio: input.aspectRatio, task: input.task, chain: chain.map((m) => m.id) },
+    // В params — всё, что нужно пересдать задачу другой модели БЕЗ агента,
+    // если kie.ai ответит сбоем уже после постановки (ADR 0006, дополнение
+    // 04.09): картинки как ушли в модель, а через markSubmitted — список
+    // моделей, которым задача уже предлагалась.
+    params: {
+      aspectRatio: input.aspectRatio,
+      task: input.task,
+      chain: chain.map((m) => m.id),
+      images: input.images ?? [],
+    },
     tokensCharged: cost,
     tgChatId: ctx.chatId,
     conversationId: ctx.conversationId,
@@ -135,42 +144,33 @@ export async function submitGeneration(
   });
 
   // Цепочка запасных: сбой одной модели не гасит участника (ADR 0006).
-  let lastError = '';
-  for (const model of chain) {
-    try {
-      const payload = buildCreateTask(model, req, `${env.PUBLIC_URL}/hooks/kie`);
-      const taskId = await app.kie.createTask(payload);
-      await app.generations.markSubmitted(gen.id, taskId, model.kieModel);
-
-      // Карточка «Рисую…» уходит сразу: участник видит место, где появится
-      // картинка, и понимает, что работа идёт. По готовности мы подменим
-      // в этом же сообщении изображение — превращение на месте.
-      const placeholderId = await app.sendPlaceholderCard?.(
-        ctx.chatId, input.caption?.trim() || 'Рисую…', gen.id,
-      );
-      if (placeholderId) {
-        await app.generations.setPlaceholder(gen.id, placeholderId);
-        ctx.notePlaceholderSent?.();
-      }
-      ctx.log.info({ generationId: gen.id, model: model.id, task: input.task }, 'генерация поставлена');
-      return {
-        ok: true,
-        summary:
-          `${input.successHint} Картинка придёт отдельным сообщением примерно через минуту. ` +
-          `Списано ${cost} токен(ов), осталось ${balance}.`,
-        note: 'Скажи это своими словами и НЕ жди результат — картинка придёт сама.',
-        data: { status: 'accepted', eta_sec: 60, balance_left: balance },
-      };
-    } catch (err) {
-      lastError = err instanceof KieError ? err.message : String(err);
-      ctx.log.warn({ generationId: gen.id, model: model.id, err: lastError },
-        'модель не приняла задачу, пробуем следующую');
+  const outcome = await submitToChain(app, gen.id, req, chain, [], ctx.log);
+  if (outcome.placed) {
+    const { model } = outcome.placed;
+    // Карточка «Рисую…» уходит сразу: участник видит место, где появится
+    // картинка, и понимает, что работа идёт. По готовности мы подменим
+    // в этом же сообщении изображение — превращение на месте.
+    const placeholderId = await app.sendPlaceholderCard?.(
+      ctx.chatId, input.caption?.trim() || 'Рисую…', gen.id,
+    );
+    if (placeholderId) {
+      await app.generations.setPlaceholder(gen.id, placeholderId);
+      ctx.notePlaceholderSent?.();
     }
+    ctx.log.info({ generationId: gen.id, model: model.id, task: input.task }, 'генерация поставлена');
+    return {
+      ok: true,
+      summary:
+        `${input.successHint} Картинка придёт отдельным сообщением примерно через минуту. ` +
+        `Списано ${cost} токен(ов), осталось ${balance}.`,
+      note: 'Скажи это своими словами и НЕ жди результат — картинка придёт сама.',
+      data: { status: 'accepted', eta_sec: 60, balance_left: balance },
+    };
   }
 
   // Ни одна модель не приняла — возвращаем токены.
   await app.tokens.grant(ctx.userId, cost, { reason: 'refund', generationId: gen.id });
-  await app.generations.markFailed(gen.id, 'no_model', lastError);
+  await app.generations.markFailed(gen.id, 'no_model', outcome.lastError);
   return {
     ok: false,
     summary: 'Сервис генерации не ответил. Токены возвращены.',
