@@ -35,11 +35,11 @@ const TASK_CHANGES = [
   'replace the messenger on horseback with a delivery drone',
   'replace the knight with a futuristic armoured hero',
   'replace the castle with a modern government building',
-  'replace the hand forge with a fully automated factory floor, no people',
+  'replace the master and his hammer with a factory floor where robots do all the work',
   'replace the caravel with a nuclear icebreaker',
   'replace the papyrus scrolls with server racks of a data centre',
   'add two modern objects to the fair',
-  'move this market to the year 2050',
+  'move this lesson to the year 2050, keep the teacher and the students in place',
 ];
 
 const cases: Case[] = [
