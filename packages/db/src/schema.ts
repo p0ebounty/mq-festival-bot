@@ -203,6 +203,15 @@ export const generations = pgTable('generations', {
    * из того, какую картинку правили (ADR 0013).
    */
   taskId: uuid('task_id').references(() => baseWorlds.id, { onDelete: 'set null' }),
+  /**
+   * Из какого стартового мира выросла работа. Ставится так же, как `task_id`:
+   * от выданной картинки мира и от любой правки в её цепочке.
+   *
+   * Отдельной колонкой, а не через `task_id`: пулы не смешиваются нигде —
+   * ни при выдаче, ни в админке (ADR 0013). Одна колонка на оба пула
+   * означала бы, что запрос «работы по заданию» однажды принесёт мир.
+   */
+  worldId: uuid('world_id').references(() => baseWorlds.id, { onDelete: 'set null' }),
   outputMediaId: uuid('output_media_id').references(() => media.id, { onDelete: 'set null' }),
 
   // Куда доставить готовую картинку. Храним прямо здесь: путь

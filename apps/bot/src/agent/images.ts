@@ -39,6 +39,12 @@ export interface DialogImage {
    * жюри могло отобрать работы по нему (ADR 0013).
    */
   taskId?: string;
+  /**
+   * Из какого мира выросла эта картинка. То же самое, что `taskId`, но для
+   * пула миров: без него в админке видно, что мир выдали, и не видно, что
+   * из него сделали.
+   */
+  worldId?: string;
   at: Date;
 }
 
@@ -51,6 +57,7 @@ interface Draft {
   label: string;
   isWorld?: boolean;
   taskId?: string;
+  worldId?: string;
   url?: string;
   mediaId?: string;
 }
@@ -90,6 +97,7 @@ export async function collectDialogImages(
       // участник вправе вернуться к раннему варианту и продолжить с него.
       isWorld: gen.kind === 'world',
       ...(gen.taskId ? { taskId: gen.taskId } : {}),
+      ...(gen.worldId ? { worldId: gen.worldId } : {}),
       label: idea ? `мы нарисовали: «${trim(idea, 70)}»` : 'картинка, которую мы нарисовали',
     });
   }
@@ -104,6 +112,7 @@ export async function collectDialogImages(
       at: world.at ?? new Date(input.conversationStartedAt.getTime() - 1),
       mediaId: world.mediaId,
       isWorld: true,
+      ...(world.worldId ? { worldId: world.worldId } : {}),
       label: 'стартовый мир участника (сценарий с превращением миров)',
     });
   }
@@ -145,12 +154,14 @@ export async function collectDialogImages(
     if (seen) {
       if (d.isWorld) seen.isWorld = true;
       if (d.taskId) seen.taskId = d.taskId;
+      if (d.worldId) seen.worldId = d.worldId;
       continue;
     }
     out.push({
       id: `img${out.length + 1}`, origin: d.origin, url, label: d.label, at: d.at,
       ...(d.isWorld ? { isWorld: true } : {}),
       ...(d.taskId ? { taskId: d.taskId } : {}),
+      ...(d.worldId ? { worldId: d.worldId } : {}),
     });
   }
   return out;

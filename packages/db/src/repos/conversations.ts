@@ -205,11 +205,29 @@ export function worldsRepo(db: Db) {
         .set({ currentWorldMediaId: mediaId, currentWorldAt: new Date() })
         .where(eq(users.id, userId));
     },
-    /** Мир и когда он выдан — время нужно, чтобы поставить его в реестр картинок. */
-    async getCurrent(userId: string): Promise<{ mediaId: string; at: Date | null } | null> {
-      const [row] = await db.select({ id: users.currentWorldMediaId, at: users.currentWorldAt })
-        .from(users).where(eq(users.id, userId)).limit(1);
-      return row?.id ? { mediaId: row.id, at: row.at } : null;
+    /**
+     * Мир и когда он выдан — время нужно, чтобы поставить его в реестр картинок.
+     *
+     * `worldId` находится по картинке, а не хранится у участника: он есть,
+     * пока текущий мир — сама выданная основа. После первой правки указатель
+     * уезжает на результат генерации, и мир там уже записан своей колонкой
+     * `generations.world_id` — реестр склеит обе записи по ссылке.
+     */
+    async getCurrent(userId: string): Promise<
+      { mediaId: string; worldId: string | null; at: Date | null } | null
+    > {
+      const [row] = await db.select({
+        id: users.currentWorldMediaId,
+        worldId: baseWorlds.id,
+        at: users.currentWorldAt,
+      })
+        .from(users)
+        .leftJoin(baseWorlds, and(
+          eq(baseWorlds.mediaId, users.currentWorldMediaId),
+          eq(baseWorlds.kind, 'world'),
+        ))
+        .where(eq(users.id, userId)).limit(1);
+      return row?.id ? { mediaId: row.id, worldId: row.worldId, at: row.at } : null;
     },
   };
 }

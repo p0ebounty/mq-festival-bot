@@ -26,6 +26,8 @@ export interface SubmitInput {
    * участника: связь выводится из того, что правили (ADR 0013).
    */
   taskId?: string | undefined;
+  /** Из какого стартового мира выросла работа — оттуда же, из реестра. */
+  worldId?: string | undefined;
   /** Что сказать агенту при успехе — он перескажет это участнику. */
   successHint: string;
   /** Подпись к готовой картинке, написанная агентом. */
@@ -127,6 +129,7 @@ export async function submitGeneration(
     conversationId: ctx.conversationId,
     ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {}),
     ...(input.taskId ? { taskId: input.taskId } : {}),
+    ...(input.worldId ? { worldId: input.worldId } : {}),
     ...(input.caption ? { caption: input.caption } : {}),
     ...(input.inputMediaIds?.length ? { inputMediaIds: input.inputMediaIds } : {}),
   });

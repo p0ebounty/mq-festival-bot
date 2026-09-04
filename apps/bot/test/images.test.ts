@@ -15,9 +15,10 @@ function fakeApp(parts: {
   photos?: Array<{ url: string; mediaId?: string; at: Date }>;
   gens?: Array<{
     mediaId: string; caption: string | null; userPrompt: string;
-    kind?: 'image' | 'world' | 'profession'; taskId?: string | null; at: Date | null;
+    kind?: 'image' | 'world' | 'profession'; taskId?: string | null;
+    worldId?: string | null; at: Date | null;
   }>;
-  world?: { mediaId: string; at: Date | null } | null;
+  world?: { mediaId: string; worldId?: string | null; at: Date | null } | null;
   task?: { taskId: string; mediaId: string; taskText: string | null; title: string; at: Date | null } | null;
   upload?: (id: string) => Promise<string | null>;
 }): AppContext {
@@ -185,6 +186,59 @@ describe('картинки в контексте модели', () => {
     const msgs = imageContextMessages(make(3), at(1), 0);
     expect(msgs).toHaveLength(3);
     expect(msgs.every((m) => !m.imageUrls)).toBe(true);
+  });
+});
+
+/**
+ * Из какого мира выросла картинка.
+ *
+ * То же самое, что задание, но для пула миров: без этой связи в админке
+ * видно, что мир выдали, и не видно, что из него сделали. Промах здесь
+ * стоит дорого — работа припишется чужому миру, а конкурс «самый
+ * неожиданный мир» судят как раз по ним.
+ */
+describe('миры в реестре картинок', () => {
+  it('мир наследуется всей цепочкой правок', async () => {
+    const images = await collect(fakeApp({
+      world: { mediaId: 'm-castle', worldId: 'w-1', at: at(1) },
+      gens: [
+        { mediaId: 'm-night', caption: 'ночной замок', userPrompt: 'x', kind: 'world', worldId: 'w-1', at: at(2) },
+        { mediaId: 'm-storm', caption: 'замок в шторм', userPrompt: 'x', kind: 'world', worldId: 'w-1', at: at(3) },
+      ],
+    }));
+    expect(images.map((i) => i.worldId)).toEqual(['w-1', 'w-1', 'w-1']);
+  });
+
+  it('мир переживает схлопывание дубля', async () => {
+    // Текущий мир участника и результат генерации — одна картинка. Дубль
+    // выбрасывается; если вместе с ним потерять мир, работа осиротеет.
+    const images = await collect(fakeApp({
+      gens: [{ mediaId: 'm1', caption: 'мир', userPrompt: 'x', kind: 'world', worldId: 'w-7', at: at(2) }],
+      world: { mediaId: 'm1', worldId: null, at: at(3) },
+    }));
+    expect(images).toHaveLength(1);
+    expect(images[0]!.worldId).toBe('w-7');
+  });
+
+  it('картинка вне игры в миры мира не получает', async () => {
+    const images = await collect(fakeApp({
+      photos: [{ url: 'https://p/tower.jpg', at: at(1) }],
+      gens: [{ mediaId: 'm-day', caption: 'дневная башня', userPrompt: 'x', kind: 'image', at: at(2) }],
+    }));
+    expect(images.every((i) => i.worldId === undefined)).toBe(true);
+  });
+
+  it('мир и задание не путаются между собой', async () => {
+    // Пулы лежат в одной таблице, и одинаковый id в двух полях означал бы,
+    // что работа считается и миром, и заданием сразу.
+    const images = await collect(fakeApp({
+      world: { mediaId: 'm-castle', worldId: 'w-1', at: at(1) },
+      task: { taskId: 't-1', mediaId: 'm-fair', taskText: 'поставь болид', title: 'арена', at: at(2) },
+    }));
+    expect(images[0]!.worldId).toBe('w-1');
+    expect(images[0]!.taskId).toBeUndefined();
+    expect(images[1]!.taskId).toBe('t-1');
+    expect(images[1]!.worldId).toBeUndefined();
   });
 });
 

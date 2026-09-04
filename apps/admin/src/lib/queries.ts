@@ -480,6 +480,112 @@ export async function taskWithWorks(id: string) {
   return { task, works };
 }
 
+// ───────────────────────────── миры ─────────────────────────────
+
+/**
+ * Пул стартовых миров.
+ *
+ * Спрашивают ровно это: «а какие миры вообще есть в боте?» Раньше ответ
+ * лежал только в базе — назвать его можно было запросом или прочитав
+ * скрипт наполнения. Название мира участник ВИДИТ («Твой мир: подводный
+ * купол»), в отличие от внутреннего имени задания, поэтому прятать здесь
+ * нечего.
+ */
+export async function listWorlds() {
+  return db.select({
+    id: baseWorlds.id,
+    title: baseWorlds.title,
+    sourcePrompt: baseWorlds.sourcePrompt,
+    mediaId: baseWorlds.mediaId,
+    isActive: baseWorlds.isActive,
+    timesIssued: baseWorlds.timesIssued,
+    // ⚠️ Голым SQL с алиасом — та же ловушка Drizzle, что у listTasks:
+    // через ${generations.worldId} = ${baseWorlds.id} обе колонки
+    // резолвятся в generations и счётчик всегда ноль.
+    works: sql<number>`(select count(*)::int from generations g
+      where g.world_id = base_worlds.id and g.status = 'success')`,
+  })
+    .from(baseWorlds)
+    .where(eq(baseWorlds.kind, 'world'))
+    .orderBy(baseWorlds.title);
+}
+
+/**
+ * Что участники сделали из миров — по одной, последней работе на пару
+ * «участник + мир», как и в заданиях.
+ *
+ * ⚠️ Мир записывается у генерации с 04.09; у работ старше связь
+ * восстановлена миграцией по цепочке `source_url` и восстановилась не у
+ * всех. Работы без мира сюда не попадают — в этом списке колонка «мир»
+ * должна что-то означать.
+ */
+export async function listWorldWorks() {
+  const rows = await db.select({
+    id: generations.id,
+    worldId: generations.worldId,
+    worldTitle: baseWorlds.title,
+    userPrompt: generations.userPrompt,
+    caption: generations.caption,
+    createdAt: generations.createdAt,
+    mediaId: media.id,
+    userId: users.id,
+    firstName: users.firstName,
+    username: users.username,
+  })
+    .from(generations)
+    .innerJoin(users, eq(users.id, generations.userId))
+    .innerJoin(media, eq(media.id, generations.outputMediaId))
+    .innerJoin(baseWorlds, eq(baseWorlds.id, generations.worldId))
+    .where(and(eq(generations.status, 'success'), eq(baseWorlds.kind, 'world')))
+    .orderBy(desc(generations.createdAt))
+    .limit(ROW_LIMIT);
+
+  // Свежие идут первыми, значит первая встреченная пара — последняя работа.
+  const latest = new Map<string, typeof rows[number] & { attempts: number }>();
+  for (const r of rows) {
+    const key = `${r.userId}:${r.worldId}`;
+    const seen = latest.get(key);
+    if (seen) seen.attempts++;
+    else latest.set(key, { ...r, attempts: 1 });
+  }
+  return [...latest.values()];
+}
+
+/** Один мир и всё, что из него выросло. */
+export async function worldWithWorks(id: string) {
+  const [world] = await db.select({
+    id: baseWorlds.id,
+    title: baseWorlds.title,
+    sourcePrompt: baseWorlds.sourcePrompt,
+    mediaId: baseWorlds.mediaId,
+    isActive: baseWorlds.isActive,
+    timesIssued: baseWorlds.timesIssued,
+  })
+    .from(baseWorlds)
+    .where(and(eq(baseWorlds.id, id), eq(baseWorlds.kind, 'world')))
+    .limit(1);
+  if (!world) return null;
+
+  const works = await db.select({
+    id: generations.id,
+    userPrompt: generations.userPrompt,
+    caption: generations.caption,
+    createdAt: generations.createdAt,
+    mediaId: media.id,
+    userId: users.id,
+    firstName: users.firstName,
+    username: users.username,
+  })
+    .from(generations)
+    .innerJoin(users, eq(users.id, generations.userId))
+    .innerJoin(media, eq(media.id, generations.outputMediaId))
+    .where(and(eq(generations.worldId, id), eq(generations.status, 'success')))
+    .orderBy(desc(generations.createdAt))
+    .limit(ROW_LIMIT);
+
+  return { world, works };
+}
+
 // ─────────────────────── начисления за репосты ───────────────────────
 
 /**
