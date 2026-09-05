@@ -1,7 +1,7 @@
 import { planModels, type ImageTask, type AspectRatio, type ToolResult, type ToolContext } from '@mq/core';
 import { submitToChain } from './chain.js';
 import type { AppContext } from '../../context.js';
-import { moderate } from '../../moderation/index.js';
+import { moderate, MODERATE_IMAGES } from '../../moderation/index.js';
 
 export interface SubmitInput {
   task: ImageTask;
@@ -53,7 +53,7 @@ export async function submitGeneration(
     userId: ctx.userId,
     stage: 'prompt',
     text: [ctx.userMessage, input.finalPrompt].filter(Boolean).join('\n'),
-    ...(input.images?.length ? { imageUrls: input.images } : {}),
+    ...(MODERATE_IMAGES && input.images?.length ? { imageUrls: input.images } : {}),
     log: ctx.log,
   });
   if (!verdict.allowed) {
