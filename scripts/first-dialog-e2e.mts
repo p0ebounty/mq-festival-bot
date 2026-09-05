@@ -28,7 +28,6 @@ const { makeGetBalanceTool } = await import('../apps/bot/src/agent/tools/get-bal
 const { makeGenerateImageTool } = await import('../apps/bot/src/agent/tools/generate-image.js');
 const { makeEditImageTool } = await import('../apps/bot/src/agent/tools/edit-image.js');
 const { makeGetBaseWorldTool } = await import('../apps/bot/src/agent/tools/base-world.js');
-const { makeSuggestTool } = await import('../apps/bot/src/agent/tools/suggest.js');
 const { users, messages, toolCalls, generations } = await import('@mq/db/schema');
 
 const app = createContext();
@@ -36,8 +35,7 @@ app.registry
   .register(makeGetBalanceTool(app))
   .register(makeGenerateImageTool(app))
   .register(makeEditImageTool(app))
-  .register(makeGetBaseWorldTool(app))
-  .register(makeSuggestTool());
+  .register(makeGetBaseWorldTool(app));
 
 const sentMedia: string[] = [];
 app.sendMedia = async (_chat, mediaId, caption) => {

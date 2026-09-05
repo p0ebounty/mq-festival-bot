@@ -37,7 +37,6 @@ const { makeGetBalanceTool } = await import('../apps/bot/src/agent/tools/get-bal
 const { makeGenerateImageTool } = await import('../apps/bot/src/agent/tools/generate-image.js');
 const { makeEditImageTool } = await import('../apps/bot/src/agent/tools/edit-image.js');
 const { makeGetTaskTool } = await import('../apps/bot/src/agent/tools/get-task.js');
-const { makeSuggestTool } = await import('../apps/bot/src/agent/tools/suggest.js');
 const { users, messages, toolCalls } = await import('@mq/db/schema');
 
 const app = createContext();
@@ -45,8 +44,7 @@ app.registry
   .register(makeGetBalanceTool(app))
   .register(makeGenerateImageTool(app))
   .register(makeEditImageTool(app))
-  .register(makeGetTaskTool(app))
-  .register(makeSuggestTool());
+  .register(makeGetTaskTool(app));
 app.sendMedia = async () => true;
 const { makeMediaUploader } = await import('../apps/bot/src/bot/media-out.js');
 const quiet = {
