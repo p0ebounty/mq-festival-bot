@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { progressTick, CAPTION_EVERY_MS } from '../src/workers/progress.js';
-import { drawingCaption } from '../src/bot/phrases.js';
+import { drawingCaption, DRAWING_CALM, DRAWING_STEPS } from '../src/bot/phrases.js';
 
 /**
  * Живая подпись карточки «Рисую…»: участники 05.09 принимали неподвижную
@@ -72,7 +72,12 @@ describe('фразы процесса', () => {
     expect(drawingCaption(75)).not.toMatch(/\d:\d\d/);
   });
 
-  it('со второй минуты честно говорят, что сегодня медленно', () => {
-    expect(drawingCaption(135)).toMatch(/не спешит|Почти/);
+  it('до минуты — короткие про процесс, с минуты — успокаивающие', () => {
+    expect(DRAWING_STEPS).toContain(drawingCaption(45));
+    expect(DRAWING_CALM).toContain(drawingCaption(60));
+    expect(DRAWING_CALM).toContain(drawingCaption(240));
+    // Все двенадцать успокаивающих успевают показаться за три минуты, по кругу.
+    expect(drawingCaption(60)).toBe(DRAWING_CALM[0]);
+    expect(drawingCaption(60 + 15 * DRAWING_CALM.length)).toBe(DRAWING_CALM[0]);
   });
 });
