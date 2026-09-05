@@ -16,7 +16,23 @@
 export const PROGRESS_TEXT =
   'Рисую. Картинка появится в карточке выше — обычно через минуту, иногда две-три.';
 
-/** Что отправить участнику: текст модели или честное «рисую», если карточка ушла. */
-export function progressReply(modelText: string, cardSent: boolean): { text: string; overridden: boolean } {
-  return cardSent ? { text: PROGRESS_TEXT, overridden: true } : { text: modelText, overridden: false };
+/** Инструменты, которые ставят генерацию и шлют карточку «Рисую…». */
+const GENERATING_TOOLS: ReadonlySet<string> = new Set(['edit_image', 'generate_image']);
+
+/**
+ * Поставлена ли в этом ходе генерация. Смотрим на РЕЗУЛЬТАТ инструмента, а
+ * не на признак «карточка ушла»: его ставят и выдача задания, и выдача мира
+ * (чтобы ответ шёл под картинкой), и по нему первая версия подменяла
+ * «напиши своими словами, что изменить» на «рисую» — на выданном задании
+ * рисовать нечего (dev, 05.09 09:40).
+ */
+export function generationPlaced(
+  toolCalls: ReadonlyArray<{ name: string; result: { ok: boolean; data?: Record<string, unknown> } }>,
+): boolean {
+  return toolCalls.some((t) => GENERATING_TOOLS.has(t.name) && t.result.ok && t.result.data?.status === 'accepted');
+}
+
+/** Что отправить участнику: текст модели или честное «рисую», если генерация поставлена. */
+export function progressReply(modelText: string, placed: boolean): { text: string; overridden: boolean } {
+  return placed ? { text: PROGRESS_TEXT, overridden: true } : { text: modelText, overridden: false };
 }
