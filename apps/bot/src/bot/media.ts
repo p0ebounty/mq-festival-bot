@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppContext } from '../context.js';
 import { env } from '../env.js';
+import { kieFileName } from './media-name.js';
 
 /** Скачивает файл Telegram по file_id. */
 async function fetchTelegramFile(
@@ -58,7 +59,9 @@ export async function ingestPhoto(
 
   const uploaded = await app.kie.uploadBase64({
     base64: `data:image/jpeg;base64,${buf.toString('base64')}`,
-    fileName: `tg-${biggest.file_id.slice(0, 16)}.jpg`,
+    // Имя — из нашего id, не из file_id: у всех фото бота он начинается
+    // одинаково, и файлы разных участников перезаписывали друг друга (05.09).
+    fileName: kieFileName('tg', media.id),
   });
   // Срок доверия к ссылке — тот же, что у наших генераций (см. media-out.ts).
   await app.media.rememberRemoteUrl(media.id, uploaded.downloadUrl, new Date(Date.now() + 24 * 60 * 60 * 1000));
