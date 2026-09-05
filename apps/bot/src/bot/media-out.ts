@@ -6,6 +6,7 @@ import type { Bot } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppContext } from '../context.js';
 import { shareButton } from './share-button.js';
+import { kieFileName } from './media-name.js';
 
 // В ESM нет __dirname — путь считаем от URL модуля.
 const ASSETS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets');
@@ -97,7 +98,7 @@ export function makeMediaUploader(app: AppContext, log: FastifyBaseLogger) {
       const buf = await app.storage.read(row.path);
       const up = await app.kie.uploadBase64({
         base64: `data:${row.mimeType};base64,${buf.toString('base64')}`,
-        fileName: `mq-${mediaId.slice(0, 12)}.jpg`,
+        fileName: kieFileName('mq', mediaId),
       });
       await app.media.rememberRemoteUrl(mediaId, up.downloadUrl, new Date(Date.now() + REMOTE_TTL_MS));
       return up.downloadUrl;
