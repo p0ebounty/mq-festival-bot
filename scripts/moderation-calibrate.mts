@@ -106,7 +106,12 @@ const cases: Case[] = [
 ];
 
 
-console.log(`модель проверки: ${MODERATION_MODEL}\n`);
+// Проверка идёт к прямому провайдеру, если он задан в настройках (05.09), —
+// тогда той же моделью, что и агент. Печатаем фактический путь, а не константу.
+const directUrl = (await app.settings.get('chat.baseUrl')).trim();
+console.log(directUrl
+  ? `модель проверки: ${await app.settings.get('kie.chatModel')} через ${directUrl}\n`
+  : `модель проверки: ${MODERATION_MODEL} через kie.ai\n`);
 const provider = await app.moderationProvider();
 
 let wrong = 0;
