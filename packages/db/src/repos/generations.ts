@@ -217,6 +217,21 @@ export function generationsRepo(db: Db) {
     },
 
     /**
+     * Генерации в полёте, у которых есть карточка «Рисую…» — для живой
+     * подписи и статуса «отправляет фото» (workers/progress.ts).
+     */
+    async inFlightWithCard(maxAgeSec: number, limit = 50) {
+      return db.select().from(generations)
+        .where(and(
+          inArray(generations.status, ['submitted', 'generating']),
+          sql`${generations.placeholderMessageId} is not null`,
+          sql`${generations.tgChatId} is not null`,
+          sql`${generations.createdAt} > now() - make_interval(secs => ${maxAgeSec})`,
+        ))
+        .limit(limit);
+    },
+
+    /**
      * Строки в полёте БЕЗ задачи у kie.ai: процесс упал между созданием
      * строки (или захватом под пересдачу) и записью taskId. В `staleInFlight`
      * они не попадают, воркер их не видит, а `activeCountForUser` считает
