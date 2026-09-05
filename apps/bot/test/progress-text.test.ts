@@ -1,35 +1,48 @@
 import { describe, it, expect } from 'vitest';
-import { generationPlaced, progressReply, PROGRESS_TEXT } from '../src/agent/progress-text.js';
+import { generationPlaced, shapeReply, taskIssued, PROGRESS_TEXT } from '../src/agent/progress-text.js';
 
 /**
- * Карточка «Рисую…» и текст «Добавил» рядом — это противоречие, которое
- * заказчик 05.09 прочитал как поломку. Когда генерация поставлена, текст
- * пишет код и говорит про процесс, а не про результат.
+ * Что уходит участнику после хода агента, решает код по результатам
+ * инструментов. Два живых случая 05.09: карточка «Рисую…» и рядом «Добавил»
+ * (противоречие заказчик прочитал как поломку); выдано задание и следом
+ * «Пусть сам опишет, что изменить — в этом и интерес» (мысль вслух поверх
+ * понятной картинки).
  */
-describe('текст ответа при поставленной генерации', () => {
-  it('карточка ушла — отчёт модели о результате заменяется на «рисую»', () => {
-    const r = progressReply('Добавил НЛО в небо над марсианской станцией.', true);
-    expect(r.overridden).toBe(true);
-    expect(r.text).toBe(PROGRESS_TEXT);
-    expect(r.text).not.toMatch(/добавил|готово|сделал/i);
-    expect(r.text).toMatch(/карточке выше/);
-  });
+const accepted = { ok: true, data: { status: 'accepted' } };
 
+describe('текст ответа после хода агента', () => {
   it('генерация считается поставленной только по принятому edit_image/generate_image', () => {
-    const accepted = { ok: true, data: { status: 'accepted' } };
     expect(generationPlaced([{ name: 'edit_image', result: accepted }])).toBe(true);
     expect(generationPlaced([{ name: 'generate_image', result: accepted }])).toBe(true);
-    // Выдача задания тоже шлёт картинку, но рисовать на ней нечего —
-    // «напиши своими словами, что изменить» подменять нельзя (dev, 05.09).
-    expect(generationPlaced([{ name: 'get_task', result: { ok: true, data: { task_title: 'x' } } }])).toBe(false);
+    expect(generationPlaced([{ name: 'get_task', result: { ok: true, data: { task: 'x' } } }])).toBe(false);
     // Отказ по лимиту «одна картинка за раз» — генерации нет.
     expect(generationPlaced([{ name: 'edit_image', result: { ok: false } }])).toBe(false);
     expect(generationPlaced([])).toBe(false);
   });
 
-  it('карточки не было — текст модели остаётся как есть', () => {
-    const r = progressReply('Сначала пришли своё фото.', false);
-    expect(r.overridden).toBe(false);
-    expect(r.text).toBe('Сначала пришли своё фото.');
+  it('задание считается выданным только по удачному get_task', () => {
+    expect(taskIssued([{ name: 'get_task', result: { ok: true } }])).toBe(true);
+    // Пул пуст — задания нет, слова модели нужны («заданий нет, пришли фото»).
+    expect(taskIssued([{ name: 'get_task', result: { ok: false } }])).toBe(false);
+    expect(taskIssued([{ name: 'edit_image', result: accepted }])).toBe(false);
+  });
+
+  it('выдано задание — участнику не уходит ничего', () => {
+    const r = shapeReply('Пусть сам опишет, что на картинке надо изменить — в этом и интерес.',
+      [{ name: 'get_task', result: { ok: true } }]);
+    expect(r).toEqual({ text: '', override: 'task_issued' });
+  });
+
+  it('поставлена генерация — отчёт о результате заменяется на «рисую»', () => {
+    const r = shapeReply('Добавил НЛО в небо над марсианской станцией.', [{ name: 'edit_image', result: accepted }]);
+    expect(r).toEqual({ text: PROGRESS_TEXT, override: 'progress' });
+    expect(r.text).not.toMatch(/добавил|готово|сделал/i);
+    expect(r.text).toMatch(/карточке выше/);
+  });
+
+  it('ничего не поставлено и не выдано — слова модели как есть', () => {
+    expect(shapeReply('Сначала пришли своё фото.', [])).toEqual({ text: 'Сначала пришли своё фото.' });
+    expect(shapeReply('Доделаю эту, потом твою.', [{ name: 'edit_image', result: { ok: false } }]))
+      .toEqual({ text: 'Доделаю эту, потом твою.' });
   });
 });
