@@ -1,6 +1,7 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { worldWithWorks } from '@/lib/queries';
+import { WORLDS_HIDDEN } from '@/lib/features';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function WorldPage({ params }: PageProps<'/worlds/[id]'>) {
   const { id } = await params;
+  if (WORLDS_HIDDEN) redirect('/tasks');
   const data = await worldWithWorks(id);
   if (!data) notFound();
   const { world, works } = data;
