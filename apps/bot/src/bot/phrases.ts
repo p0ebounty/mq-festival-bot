@@ -93,6 +93,39 @@ export function stillThinking(step: number): string {
   return STILL_THINKING[step % STILL_THINKING.length]!;
 }
 
+/**
+ * Подпись карточки «Рисую…» по ходу генерации — меняется каждые 15 секунд
+ * (workers/progress.ts). Фразы про процесс, а не про ожидание: «подбираю
+ * цвета» читается как работа, «подождите» — как зависание. Со второй минуты
+ * честно говорим, что сегодня медленно: сервис рисования в плохой день
+ * отдаёт картинку за две-четыре минуты.
+ */
+const DRAWING_STEPS = [
+  'Разглядываю детали…',
+  'Подбираю цвета…',
+  'Смешиваю краски…',
+  'Прорисовываю фон…',
+  'Настраиваю свет…',
+  'Добавляю тени…',
+  'Проверяю пропорции…',
+  'Навожу резкость…',
+] as const;
+
+const DRAWING_SLOW = [
+  'Ещё рисую. Сервис сегодня не спешит, но картинка будет…',
+  'Почти. Дорисовываю последние мазки…',
+] as const;
+
+export function drawingCaption(elapsedSec: number): string {
+  const step = Math.floor(elapsedSec / 15);
+  const phrase = elapsedSec >= 120
+    ? DRAWING_SLOW[step % DRAWING_SLOW.length]!
+    : DRAWING_STEPS[step % DRAWING_STEPS.length]!;
+  const m = Math.floor(elapsedSec / 60);
+  const s = String(elapsedSec % 60).padStart(2, '0');
+  return `${phrase} ${m}:${s}`;
+}
+
 let tick = 0;
 
 function pick(list: readonly string[]): string {

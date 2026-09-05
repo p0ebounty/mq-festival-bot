@@ -6,6 +6,7 @@ import { registerMediaRoutes } from './routes/media.js';
 import { registerShareRoutes } from './routes/share.js';
 import { registerTelegramWebhook, installWebhook } from './routes/telegram.js';
 import { startReconcileWorker } from './workers/reconcile.js';
+import { startProgressWorker } from './workers/progress.js';
 import { startHousekeepingWorker } from './workers/housekeeping.js';
 import { createBot } from './bot/index.js';
 import { makeDeliverer } from './bot/deliver.js';
@@ -75,6 +76,7 @@ ctx.sendAlert = async (chatId, text) => {
 };
 
 const reconciler = startReconcileWorker(ctx, app.log);
+const progress = startProgressWorker(ctx, bot, app.log);
 
 // Уборка и присмотр: удаление старых медиа и тревога по кредитам kie.ai.
 const alertRaw = await ctx.settings.get('ops.alertChatId');
@@ -87,6 +89,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.once(sig, () => {
     app.log.info(`получен ${sig}, останавливаемся`);
     reconciler.stop();
+    progress.stop();
     housekeeper.stop();
     void closeBrowser()
       .then(() => app.close())

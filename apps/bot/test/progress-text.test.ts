@@ -33,11 +33,10 @@ describe('текст ответа после хода агента', () => {
     expect(r).toEqual({ text: '', override: 'task_issued' });
   });
 
-  it('поставлена генерация — отчёт о результате заменяется на «рисую»', () => {
+  it('поставлена генерация — участнику не уходит ничего, карточка говорит сама', () => {
     const r = shapeReply('Добавил НЛО в небо над марсианской станцией.', [{ name: 'edit_image', result: accepted }]);
     expect(r).toEqual({ text: PROGRESS_TEXT, override: 'progress' });
-    expect(r.text).not.toMatch(/добавил|готово|сделал/i);
-    expect(r.text).toMatch(/карточке выше/);
+    expect(r.text).toBe('');
   });
 
   it('ничего не поставлено и не выдано — слова модели как есть', () => {
