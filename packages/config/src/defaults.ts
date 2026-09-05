@@ -11,6 +11,13 @@ export const SETTINGS_SCHEMA = {
   // цепочкой запасных. Разрешение — там же (Quality → 1K/2K). См. ADR 0006.
   'kie.apiKey':    { type: 'secret', default: '',                label: 'API-ключ kie.ai' },
   'kie.chatModel': { type: 'string', default: 'gemini-3-flash', label: 'Модель агента' },
+  /**
+   * Прямой текстовый провайдер (05.09): любой OpenAI-совместимый
+   * chat/completions — api.openai.com, openrouter.ai. Пустой URL — текстовые
+   * модели идут через kie.ai, как раньше. Картинки всегда через kie.ai.
+   */
+  'chat.baseUrl':  { type: 'string', default: '', label: 'URL текстового провайдера' },
+  'chat.apiKey':   { type: 'secret', default: '', label: 'Ключ текстового провайдера' },
 
   // ── экономика токенов ──
   'economy.startBalance':  { type: 'int', default: 10, min: 0, max: 1000, label: 'Стартовый баланс' },

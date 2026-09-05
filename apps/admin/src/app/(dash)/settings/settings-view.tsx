@@ -201,14 +201,28 @@ export function SettingsView({ initial, routes }: Props) {
             <Card>
               <CardHeader>
                 <CardTitle>Модель агента</CardTitle>
-                <CardDescription>Ведёт диалог и вызывает инструменты.</CardDescription>
+                <CardDescription>
+                  Ведёт диалог, вызывает инструменты и проверяет контент. Картинки
+                  всегда рисует kie.ai, а текстовая модель может жить у другого
+                  провайдера: укажите его URL и ключ.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <FieldGroup>
                   <TextSetting
                     id="chat-model" label="Модель" settingKey="kie.chatModel"
                     rows={rows} onSave={save} saving={saving}
-                    hint="claude-sonnet-5 — быстрее и втрое дешевле opus-5."
+                    hint="На kie.ai: gemini-3-pro или gpt-5-5. У прямого провайдера — его имя модели: gpt-4.1 у OpenAI, openai/gpt-4.1 у OpenRouter. Проверка контента идёт этой же моделью."
+                  />
+                  <TextSetting
+                    id="chat-base-url" label="URL провайдера" settingKey="chat.baseUrl"
+                    rows={rows} onSave={save} saving={saving}
+                    hint="Пусто — текст через kie.ai. Прямой провайдер: https://api.openai.com/v1 или https://openrouter.ai/api/v1."
+                  />
+                  <SecretSetting
+                    id="chat-api-key" label="Ключ провайдера" settingKey="chat.apiKey"
+                    rows={rows} onSave={save} saving={saving}
+                    hint="Нужен только для прямого провайдера. Хранится зашифрованным, полное значение не показывается."
                   />
                 </FieldGroup>
               </CardContent>
@@ -368,6 +382,55 @@ function TextSetting({
           variant="outline"
           disabled={!dirty || saving === settingKey}
           onClick={() => onSave(settingKey, draft)}
+        >
+          {saving === settingKey ? <Spinner data-icon="inline-start" /> : null}
+          Сохранить
+        </Button>
+      </div>
+      {hint ? <FieldDescription>{hint}</FieldDescription> : null}
+    </Field>
+  );
+}
+
+/**
+ * Секретное поле: значение не показывается, только признак «задан».
+ * Ввод — как у ключа kie.ai: password и без автозаполнения.
+ */
+function SecretSetting({
+  id, label, settingKey, rows, onSave, saving, hint,
+}: {
+  id: string;
+  label: string;
+  settingKey: string;
+  rows: Record<string, SettingRow>;
+  onSave: (key: string, value: string) => Promise<boolean>;
+  saving: string | null;
+  hint?: string;
+}) {
+  const [draft, setDraft] = useState('');
+  const isSet = rows[settingKey]?.hasValue ?? false;
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>
+        {label}{' '}
+        <Badge variant={isSet ? 'secondary' : 'outline'}>{isSet ? 'задан' : 'не задан'}</Badge>
+      </FieldLabel>
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={isSet ? 'Введите новый ключ, чтобы заменить' : 'вставьте ключ провайдера'}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className="font-mono"
+        />
+        <Button
+          variant="outline"
+          disabled={!draft.trim() || saving === settingKey}
+          onClick={async () => { if (await onSave(settingKey, draft.trim())) setDraft(''); }}
         >
           {saving === settingKey ? <Spinner data-icon="inline-start" /> : null}
           Сохранить
