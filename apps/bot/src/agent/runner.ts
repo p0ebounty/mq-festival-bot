@@ -6,6 +6,7 @@ import {
 import type { AppContext } from '../context.js';
 import { collectDialogImages, imageContextMessages } from './images.js';
 import { capReply, DRAWING_TOOLS } from './reply-limit.js';
+import { progressReply } from './progress-text.js';
 import { moderate } from '../moderation/index.js';
 
 export interface IncomingMessage {
@@ -182,7 +183,10 @@ export async function handleIncoming(
   // Инструменты к этому моменту УЖЕ отработали: режется текст, а не ход.
   // Откатывать выданную картинку или списанный токен он не может и не должен.
   const drew = result.toolCalls.some((t) => DRAWING_TOOLS.has(t.name) && t.result.ok);
-  const capped = capReply(result.text, { drawing: drew });
+  // Поставлена генерация — текст пишет код: «рисую», а не «добавил».
+  // Модель отчитывается о результате, которого ещё нет (см. progress-text.ts).
+  const progress = progressReply(result.text, cardSent);
+  const capped = capReply(progress.text, { drawing: drew });
 
   if (capped.cut) {
     // Подсказки того же хода выбрасываем: они были про то, что мы только что
@@ -211,6 +215,8 @@ export async function handleIncoming(
       iterations: result.iterations,
       hitLimit: result.hitLimit,
       ...(capped.cut ? { cut: capped.cut } : {}),
+      // Оригинал модели — для админки: видно, что она собиралась сказать.
+      ...(progress.overridden ? { progressOverride: result.text } : {}),
     },
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
