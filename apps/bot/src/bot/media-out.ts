@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { Bot } from 'grammy';
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppContext } from '../context.js';
-import { shareButton } from './share-button.js';
+import { drawingCaption } from './phrases.js';
 import { kieFileName } from './media-name.js';
 
 // В ESM нет __dirname — путь считаем от URL модуля.
@@ -20,18 +20,19 @@ let loadingCard: Buffer | null = null;
 
 export function makePlaceholderSender(bot: Bot, log: FastifyBaseLogger) {
   return async function sendPlaceholderCard(
-    chatId: bigint, generationId: string,
+    chatId: bigint, _generationId: string,
   ): Promise<bigint | null> {
     try {
       loadingCard ??= await readFile(path.join(ASSETS, 'loading.png'));
-      // Без подписи: подпись к картинке приходит ОТДЕЛЬНЫМ сообщением, когда
-      // картинка готова, ответом на эту карточку (deliver.ts). Подмена
-      // картинки на месте не двигает чат и не даёт уведомления — участник
-      // не замечал, что готово (05.09). Новое сообщение замечает.
+      // Подпись — первая фраза про процесс, дальше её каждые 15 с меняет
+      // воркер (workers/progress.ts); подпись агента к готовой картинке
+      // приходит ОТДЕЛЬНЫМ сообщением ответом на эту карточку (deliver.ts):
+      // подмена на месте не двигает чат и не даёт уведомления.
+      // Кнопки «Скачать и поделиться» на заглушке НЕТ — она появляется
+      // вместе с готовой картинкой (решение владельца 05.09: недоступная
+      // кнопка со знаком запрета путала).
       const msg = await bot.api.sendPhoto(Number(chatId), new InputFile(loadingCard, 'loading.png'), {
-        // Кнопка появляется сразу, но недоступной: участник видит, что
-        // действие будет, и не ищет её потом глазами.
-        reply_markup: shareButton(generationId, false),
+        caption: drawingCaption(0),
       });
       return BigInt(msg.message_id);
     } catch (err) {

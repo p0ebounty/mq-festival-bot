@@ -118,12 +118,11 @@ const DRAWING_SLOW = [
 
 export function drawingCaption(elapsedSec: number): string {
   const step = Math.floor(elapsedSec / 15);
-  const phrase = elapsedSec >= 120
+  // Без счётчика времени: цифры под картинкой читаются как таймер ожидания
+  // и только нервируют; фразы про процесс — нет (решение владельца 05.09).
+  return elapsedSec >= 120
     ? DRAWING_SLOW[step % DRAWING_SLOW.length]!
     : DRAWING_STEPS[step % DRAWING_STEPS.length]!;
-  const m = Math.floor(elapsedSec / 60);
-  const s = String(elapsedSec % 60).padStart(2, '0');
-  return `${phrase} ${m}:${s}`;
 }
 
 let tick = 0;

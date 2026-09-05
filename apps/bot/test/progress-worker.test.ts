@@ -66,10 +66,10 @@ describe('живая подпись карточки', () => {
 });
 
 describe('фразы процесса', () => {
-  it('идут по кругу каждые 15 секунд и несут время', () => {
-    expect(drawingCaption(15)).toMatch(/…\s0:15$/);
+  it('идут по кругу каждые 15 секунд, без счётчика времени', () => {
+    expect(drawingCaption(0)).toMatch(/…$/);
     expect(drawingCaption(30)).not.toBe(drawingCaption(15));
-    expect(drawingCaption(75)).toMatch(/1:15$/);
+    expect(drawingCaption(75)).not.toMatch(/\d:\d\d/);
   });
 
   it('со второй минуты честно говорят, что сегодня медленно', () => {
