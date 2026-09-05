@@ -7,7 +7,7 @@ import type { AppContext } from '../context.js';
 import { collectDialogImages, imageContextMessages } from './images.js';
 import { capReply, DRAWING_TOOLS } from './reply-limit.js';
 import { shapeReply } from './progress-text.js';
-import { moderate } from '../moderation/index.js';
+import { moderate, MODERATE_IMAGES } from '../moderation/index.js';
 
 export interface IncomingMessage {
   tgId: bigint;
@@ -64,7 +64,7 @@ export async function handleIncoming(
   // хранилище: иначе оно успеет уйти модели вместе с историей и осесть в
   // галерее админки. Текстовые запросы проверяются позже, у самой
   // генерации, — там виден готовый промпт (ADR 0014).
-  if (msg.imageUrls?.length) {
+  if (msg.imageUrls?.length && MODERATE_IMAGES) {
     const verdict = await moderate(app, {
       userId: user.id,
       stage: 'photo',
