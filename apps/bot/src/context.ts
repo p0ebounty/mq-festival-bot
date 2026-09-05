@@ -15,6 +15,11 @@ import { MODERATION_MODEL } from './moderation/classifier.js';
  * в маршруты и воркеры — чтобы не тянуть синглтоны из модулей и чтобы
  * в тестах можно было подсунуть подделки.
  */
+/** Префикс модели, уводящий запрос на прямой OpenAI вместо kie.ai. */
+const OPENAI_PREFIX = 'openai:';
+/** Модель проверки контента на прямом OpenAI: быстрая и со стандартными параметрами. */
+const OPENAI_MODERATION_MODEL = 'openai:gpt-4.1-mini';
+
 export interface AppContext {
   db: Db;
   settings: SettingsService;
@@ -91,6 +96,17 @@ export function createContext(): AppContext {
   const providerFor = (model: string): ChatProvider => {
     const getApiKey = () => settings.get('kie.apiKey');
 
+    // Прямой OpenAI, мимо kie.ai: «openai:gpt-4.1». Тот же адаптер
+    // chat/completions, другой адрес и другой ключ (05.09: kie.ai на
+    // чат-моделях отвечал минутами, картинки при этом рисовал).
+    if (model.startsWith(OPENAI_PREFIX)) {
+      return new OpenAiChatProvider({
+        getApiKey: () => env.OPENAI_API_KEY ?? '',
+        model: model.slice(OPENAI_PREFIX.length),
+        buildUrl: () => `${env.OPENAI_API_BASE}/chat/completions`,
+      });
+    }
+
     if (model.startsWith('gpt-5')) {
       return new ResponsesApiProvider({
         getApiKey, model, url: `${env.KIE_API_BASE}/codex/v1/responses`, effort: 'low',
@@ -110,7 +126,10 @@ export function createContext(): AppContext {
    * промпт: это не регулировка, а часть контракта. Мультимодальная —
    * проверять надо и текст, и присланные фото.
    */
-  const moderationProvider = async (): Promise<ChatProvider> => providerFor(MODERATION_MODEL);
+  // При заданном ключе OpenAI проверка идёт туда же, мимо kie.ai: на
+  // фестивале 05.09 именно она первой перестала укладываться в срок.
+  const moderationProvider = async (): Promise<ChatProvider> =>
+    providerFor(env.OPENAI_API_KEY ? OPENAI_MODERATION_MODEL : MODERATION_MODEL);
 
   return {
     db, settings, storage, kie,
