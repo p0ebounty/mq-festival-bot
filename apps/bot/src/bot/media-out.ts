@@ -20,12 +20,15 @@ let loadingCard: Buffer | null = null;
 
 export function makePlaceholderSender(bot: Bot, log: FastifyBaseLogger) {
   return async function sendPlaceholderCard(
-    chatId: bigint, caption: string, generationId: string,
+    chatId: bigint, generationId: string,
   ): Promise<bigint | null> {
     try {
       loadingCard ??= await readFile(path.join(ASSETS, 'loading.png'));
+      // Без подписи: подпись к картинке приходит ОТДЕЛЬНЫМ сообщением, когда
+      // картинка готова, ответом на эту карточку (deliver.ts). Подмена
+      // картинки на месте не двигает чат и не даёт уведомления — участник
+      // не замечал, что готово (05.09). Новое сообщение замечает.
       const msg = await bot.api.sendPhoto(Number(chatId), new InputFile(loadingCard, 'loading.png'), {
-        caption,
         // Кнопка появляется сразу, но недоступной: участник видит, что
         // действие будет, и не ищет её потом глазами.
         reply_markup: shareButton(generationId, false),

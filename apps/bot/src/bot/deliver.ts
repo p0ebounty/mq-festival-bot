@@ -53,9 +53,12 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
     }
 
     // Подпись пишет агент при постановке задачи — она про идею участника,
-    // а не казённое «Готово!». Если агент её не дал, обходимся без подписи:
-    // пустая лучше безликой.
+    // а не казённое «Готово!». Когда картинка подменяется в карточке,
+    // подпись уходит ОТДЕЛЬНЫМ сообщением ответом на карточку: подмена на
+    // месте не двигает чат и не даёт уведомления, и участники не замечали,
+    // что готово (05.09). Новое сообщение с цитатой карточки — замечают.
     const caption = gen.caption?.trim();
+    const doneText = caption || 'Готово! Картинка выше.';
 
     let buf: Buffer;
     try {
@@ -75,10 +78,18 @@ export function makeDeliverer(app: AppContext, bot: Bot, log: FastifyBaseLogger)
     if (cardId !== undefined) {
       try {
         await bot.api.editMessageMedia(chatId, cardId,
-          InputMediaBuilder.photo(new InputFile(buf, 'mqbot.jpg'), caption ? { caption } : {}),
+          InputMediaBuilder.photo(new InputFile(buf, 'mqbot.jpg')),
           { reply_markup: markup });
         log.info({ generationId, bytes: media.bytes }, 'картинка подменена в карточке');
         delivered = true;
+        await bot.api.sendMessage(chatId, doneText, { reply_parameters: { message_id: cardId } })
+          .catch((e: unknown) => log.warn({ generationId, err: String(e) }, 'подпись к готовой картинке не отправилась'));
+        // В историю — как реплика бота: модель видит, что картинка готова,
+        // и «ещё раз» читается как переделка, а не как ожидание.
+        if (gen.conversationId) {
+          await app.conversations.addMessage({ conversationId: gen.conversationId, role: 'assistant', text: doneText })
+            .catch((e: unknown) => log.warn({ generationId, err: String(e) }, 'подпись не записалась в историю'));
+        }
       } catch (err) {
         // Карточку могли удалить, или сообщение слишком старое.
         log.warn({ generationId, err: String(err).slice(0, 140) },
