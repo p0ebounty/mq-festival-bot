@@ -150,9 +150,7 @@ export async function submitGeneration(
     // Карточка «Рисую…» уходит сразу: участник видит место, где появится
     // картинка, и понимает, что работа идёт. По готовности мы подменим
     // в этом же сообщении изображение — превращение на месте.
-    const placeholderId = await app.sendPlaceholderCard?.(
-      ctx.chatId, input.caption?.trim() || 'Рисую…', gen.id,
-    );
+    const placeholderId = await app.sendPlaceholderCard?.(ctx.chatId, gen.id);
     if (placeholderId) {
       await app.generations.setPlaceholder(gen.id, placeholderId);
       ctx.notePlaceholderSent?.();

@@ -122,6 +122,26 @@ describe('доставка результата', () => {
     expect(json).not.toContain('🚫');
   });
 
+  it('подпись приходит отдельным сообщением ответом на карточку, а не в самой картинке', async () => {
+    // 05.09: подмена картинки на месте не двигает чат и не даёт уведомления —
+    // участники не замечали, что готово. Новое сообщение с цитатой карточки
+    // замечают, а подпись агента в нём — про их идею, а не казённое «Готово».
+    const h = harness();
+    await (await load())(h.app, h.bot as never, h.log as never)('g1');
+
+    const edit = h.sent.find((s) => s.method === 'editMessageMedia')!;
+    // Третий аргумент — InputMedia; InputFile внутри в JSON не превращается,
+    // поэтому смотрим на поле, а не на строку.
+    expect((edit.args[2] as { caption?: string }).caption).toBeUndefined();
+
+    const note = h.sent.find((s) => s.method === 'sendMessage')!;
+    expect(note).toBeDefined();
+    expect(note.args[1]).toBe('Твой кот в шляпе');
+    expect(note.args[2]).toEqual({ reply_parameters: { message_id: 7 } });
+    // И в историю диалога — модель видит, что картинка готова.
+    expect(h.history.some((m) => m.role === 'assistant' && m.text === 'Твой кот в шляпе')).toBe(true);
+  });
+
   it('QR-карточка САМА не отправляется — только по нажатию', async () => {
     // Второе сообщение на каждую генерацию засоряло чат: живая жалоба 27.08.
     const h = harness();

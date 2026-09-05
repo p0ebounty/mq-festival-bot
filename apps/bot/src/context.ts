@@ -53,7 +53,7 @@ export interface AppContext {
    * Отправляет карточку «Рисую…» и возвращает id сообщения.
    * По готовности картинка в этом же сообщении подменяется результатом.
    */
-  sendPlaceholderCard?: (chatId: bigint, caption: string, generationId: string) => Promise<bigint | null>;
+  sendPlaceholderCard?: (chatId: bigint, generationId: string) => Promise<bigint | null>;
   /**
    * Ссылка на бота вида `https://t.me/<username>` — подвал публичной
    * страницы. Берётся у самого Telegram при старте (`bot.init()`), а не из
