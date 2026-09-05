@@ -27,7 +27,7 @@ describe('системный промпт', () => {
       'Вопрос — это не команда',
       'private_note_do_not_send',
       'Эмодзи',
-      'suggest_replies',
+      'Кнопок-подсказок у тебя нет',
     ]) {
       expect(DEFAULT_SYSTEM_PROMPT, `нет правила: ${rule}`).toContain(rule);
     }
@@ -127,7 +127,7 @@ describe('правило выбора картинки', () => {
   });
 
   it('не упоминает удалённые инструменты', () => {
-    for (const gone of ['restyle_photo', 'transform_world', 'list_professions', 'edit_photo', 'get_base_world']) {
+    for (const gone of ['restyle_photo', 'transform_world', 'list_professions', 'edit_photo', 'get_base_world', 'suggest_replies']) {
       expect(p, gone).not.toContain(gone);
     }
   });
@@ -148,8 +148,8 @@ describe('уроки первого боевого диалога', () => {
     expect(p).toContain('Свободных «миров» на этом фестивале');
   });
 
-  it('запрещает кнопку про изменение мира, когда мира ещё нет', () => {
-    expect(p).toMatch(/Не предлагай кнопкой то, чего у человека ещё нет/i);
+  it('запрещает предлагать правку картинки, когда картинки ещё нет', () => {
+    expect(p).toMatch(/Не предлагай того, чего у человека ещё нет/i);
   });
 
   it('требует собственное фото для профессии', () => {

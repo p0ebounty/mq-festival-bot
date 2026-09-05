@@ -13,7 +13,6 @@ import { registerShareButton } from './bot/share-button.js';
 import { makeGetBalanceTool } from './agent/tools/get-balance.js';
 import { makeGenerateImageTool } from './agent/tools/generate-image.js';
 import { makeEditImageTool } from './agent/tools/edit-image.js';
-import { makeSuggestTool } from './agent/tools/suggest.js';
 import { makeGetTaskTool } from './agent/tools/get-task.js';
 import { makeVerifySocialTool } from './agent/tools/verify-social.js';
 import { closeBrowser } from './social/page-fetch.js';
@@ -56,8 +55,10 @@ ctx.registry
   // get_base_world намеренно НЕ регистрируется с 05.09: заказчик убрал
   // свободные миры из игры, стартовая картинка — это задание (STATE.md).
   .register(makeGetTaskTool(ctx))
-  .register(makeVerifySocialTool(ctx))
-  .register(makeSuggestTool());
+  .register(makeVerifySocialTool(ctx));
+  // suggest_replies не регистрируется с 05.09: заказчик просил ровно две
+  // кнопки — фиксированные под приветствием (START_CHIPS). Кнопки, которые
+  // агент придумывал сам, путали участников (STATE.md, 05.09).
 
 const { bot } = createBot(ctx, app.log);
 ctx.deliverGeneration = makeDeliverer(ctx, bot, app.log);
