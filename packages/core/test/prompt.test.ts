@@ -127,7 +127,7 @@ describe('правило выбора картинки', () => {
   });
 
   it('не упоминает удалённые инструменты', () => {
-    for (const gone of ['restyle_photo', 'transform_world', 'list_professions', 'edit_photo']) {
+    for (const gone of ['restyle_photo', 'transform_world', 'list_professions', 'edit_photo', 'get_base_world']) {
       expect(p, gone).not.toContain(gone);
     }
   });
@@ -141,9 +141,11 @@ describe('правило выбора картинки', () => {
 describe('уроки первого боевого диалога', () => {
   const p = DEFAULT_SYSTEM_PROMPT;
 
-  it('велит выдавать готовый мир, а не рассказывать о нём', () => {
-    expect(p).toMatch(/мир не описывают словами, а \*\*выдают\*\*/i);
+  it('велит выдавать стартовую картинку, а не рассказывать о ней', () => {
+    // С 05.09 стартовая картинка — это задание; свободных миров в игре нет.
+    expect(p).toMatch(/не описывают словами, а \*\*выдают\*\*/i);
     expect(p).toContain('что есть готового');
+    expect(p).toContain('Свободных «миров» на этом фестивале');
   });
 
   it('запрещает кнопку про изменение мира, когда мира ещё нет', () => {
@@ -233,12 +235,12 @@ describe('состояние участника в промпте', () => {
 
   it('без мира прямо запрещает предлагать его правку', () => {
     const s = buildSystemPrompt('БАЗА', { ...base, hasWorld: false });
-    expect(s).toMatch(/мир[^.]*ещё НЕ выдавали/i);
+    expect(s).toMatch(/картинку[^.]*ещё НЕ выдавали/i);
   });
 
   it('с миром зовёт менять его через edit_image', () => {
     const s = buildSystemPrompt('БАЗА', { ...base, hasWorld: true, imageCount: 1 });
-    expect(s).toContain('мир участнику уже выдан');
+    expect(s).toContain('картинка участнику уже выдана');
   });
 
   it('без фото участника запрещает подставлять чужую картинку', () => {

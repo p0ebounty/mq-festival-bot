@@ -33,7 +33,7 @@ const { MAX_REPLY_CHARS } = await import('../apps/bot/src/agent/reply-limit.js')
 const { makeGetBalanceTool } = await import('../apps/bot/src/agent/tools/get-balance.js');
 const { makeGenerateImageTool } = await import('../apps/bot/src/agent/tools/generate-image.js');
 const { makeEditImageTool } = await import('../apps/bot/src/agent/tools/edit-image.js');
-const { makeGetBaseWorldTool } = await import('../apps/bot/src/agent/tools/base-world.js');
+const { makeGetTaskTool } = await import('../apps/bot/src/agent/tools/get-task.js');
 const { makeSuggestTool } = await import('../apps/bot/src/agent/tools/suggest.js');
 const { users, conversations, messages, toolCalls } = await import('@mq/db/schema');
 
@@ -42,7 +42,7 @@ app.registry
   .register(makeGetBalanceTool(app))
   .register(makeGenerateImageTool(app))
   .register(makeEditImageTool(app))
-  .register(makeGetBaseWorldTool(app))
+  .register(makeGetTaskTool(app))
   .register(makeSuggestTool());
 
 app.sendMedia = async () => true;
@@ -57,7 +57,7 @@ const TG_ID = 999000111n;
 let mid = 1n;
 let failures = 0;
 
-const DRAWS = new Set(['generate_image', 'edit_image', 'get_base_world']);
+const DRAWS = new Set(['generate_image', 'edit_image', 'get_task']);
 
 function check(ok: boolean, label: string, detail = '') {
   console.log(`   ${ok ? '✓' : '✗'} ${label}${detail ? ` — ${detail}` : ''}`);
