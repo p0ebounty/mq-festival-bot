@@ -1,9 +1,13 @@
+import { redirect } from 'next/navigation';
 import { listWorlds, listWorldWorks } from '@/lib/queries';
+import { WORLDS_HIDDEN } from '@/lib/features';
 import { WorldsView } from './view';
 
 export const dynamic = 'force-dynamic';
 
 export default async function WorldsPage() {
+  // Раздел скрыт (см. lib/features.ts): старая ссылка ведёт к заданиям.
+  if (WORLDS_HIDDEN) redirect('/tasks');
   const [worlds, works] = await Promise.all([listWorlds(), listWorldWorks()]);
 
   return (

@@ -12,13 +12,15 @@ import {
   SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarRail,
 } from '@/components/ui/sidebar';
 import { Badge } from '@/components/ui/badge';
+import { WORLDS_HIDDEN } from '@/lib/features';
 
 const ITEMS = [
   { href: '/', label: 'Дашборд', icon: LayoutDashboardIcon },
   { href: '/users', label: 'Участники', icon: UsersIcon },
   { href: '/dialogs', label: 'Диалоги', icon: MessagesSquareIcon },
   { href: '/generations', label: 'Генерации', icon: ImageIcon },
-  { href: '/worlds', label: 'Миры', icon: GlobeIcon },
+  // Миры скрыты с 05.09 — см. lib/features.ts.
+  ...(WORLDS_HIDDEN ? [] : [{ href: '/worlds', label: 'Миры', icon: GlobeIcon }]),
   { href: '/tasks', label: 'Задания', icon: TargetIcon },
   { href: '/claims', label: 'Репосты', icon: Share2Icon },
   { href: '/audit', label: 'Аудит', icon: ScrollTextIcon },
