@@ -32,7 +32,32 @@ export function generationPlaced(
   return toolCalls.some((t) => GENERATING_TOOLS.has(t.name) && t.result.ok && t.result.data?.status === 'accepted');
 }
 
-/** Что отправить участнику: текст модели или честное «рисую», если генерация поставлена. */
-export function progressReply(modelText: string, placed: boolean): { text: string; overridden: boolean } {
-  return placed ? { text: PROGRESS_TEXT, overridden: true } : { text: modelText, overridden: false };
+/**
+ * Выдано ли в этом ходе задание. Картинка с текстом задания уже у
+ * участника; всё, что модель пишет следом, — лишнее. 05.09 она написала
+ * «Пусть сам опишет, что на картинке надо изменить — в этом и интерес»:
+ * мысль вслух в третьем лице, поверх и так понятной картинки.
+ */
+export function taskIssued(
+  toolCalls: ReadonlyArray<{ name: string; result: { ok: boolean } }>,
+): boolean {
+  return toolCalls.some((t) => t.name === 'get_task' && t.result.ok);
+}
+
+export type ReplyOverride = 'progress' | 'task_issued';
+
+/**
+ * Что отправить участнику после хода агента.
+ *
+ * Выдано задание — ничего: картинка с целью уже у него, пустой текст
+ * отправитель не шлёт и убирает «Думаю…». Поставлена генерация — честное
+ * «рисую» вместо отчёта о результате, которого нет. Иначе — слова модели.
+ */
+export function shapeReply(
+  modelText: string,
+  toolCalls: ReadonlyArray<{ name: string; result: { ok: boolean; data?: Record<string, unknown> } }>,
+): { text: string; override?: ReplyOverride } {
+  if (taskIssued(toolCalls)) return { text: '', override: 'task_issued' };
+  if (generationPlaced(toolCalls)) return { text: PROGRESS_TEXT, override: 'progress' };
+  return { text: modelText };
 }

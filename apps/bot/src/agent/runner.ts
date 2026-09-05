@@ -6,7 +6,7 @@ import {
 import type { AppContext } from '../context.js';
 import { collectDialogImages, imageContextMessages } from './images.js';
 import { capReply, DRAWING_TOOLS } from './reply-limit.js';
-import { generationPlaced, progressReply } from './progress-text.js';
+import { shapeReply } from './progress-text.js';
 import { moderate } from '../moderation/index.js';
 
 export interface IncomingMessage {
@@ -183,12 +183,13 @@ export async function handleIncoming(
   // Инструменты к этому моменту УЖЕ отработали: режется текст, а не ход.
   // Откатывать выданную картинку или списанный токен он не может и не должен.
   const drew = result.toolCalls.some((t) => DRAWING_TOOLS.has(t.name) && t.result.ok);
-  // Поставлена генерация — текст пишет код: «рисую», а не «добавил».
-  // Модель отчитывается о результате, которого ещё нет (см. progress-text.ts).
-  // Именно по результату инструмента, а не по cardSent: тот признак ставит и
-  // выдача задания, и на ней «рисую» было ложью в другую сторону.
-  const progress = progressReply(result.text, generationPlaced(result.toolCalls));
-  const capped = capReply(progress.text, { drawing: drew });
+  // Что реально отправить — решает код по результатам инструментов
+  // (progress-text.ts): выдано задание — ничего, картинка с целью уже у
+  // участника; поставлена генерация — «рисую», а не «добавил»; иначе слова
+  // модели. По результату инструмента, а не по cardSent: тот признак ставит
+  // и выдача задания, и на ней «рисую» было ложью в другую сторону.
+  const shaped = shapeReply(result.text, result.toolCalls);
+  const capped = capReply(shaped.text, { drawing: drew });
 
   if (capped.cut) {
     // Подсказки того же хода выбрасываем: они были про то, что мы только что
@@ -218,7 +219,7 @@ export async function handleIncoming(
       hitLimit: result.hitLimit,
       ...(capped.cut ? { cut: capped.cut } : {}),
       // Оригинал модели — для админки: видно, что она собиралась сказать.
-      ...(progress.overridden ? { progressOverride: result.text } : {}),
+      ...(shaped.override ? { replyOverride: shaped.override, modelText: result.text } : {}),
     },
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
