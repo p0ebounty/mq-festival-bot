@@ -6,7 +6,7 @@ import {
 import type { AppContext } from '../context.js';
 import { collectDialogImages, imageContextMessages } from './images.js';
 import { capReply, DRAWING_TOOLS } from './reply-limit.js';
-import { progressReply } from './progress-text.js';
+import { generationPlaced, progressReply } from './progress-text.js';
 import { moderate } from '../moderation/index.js';
 
 export interface IncomingMessage {
@@ -185,7 +185,9 @@ export async function handleIncoming(
   const drew = result.toolCalls.some((t) => DRAWING_TOOLS.has(t.name) && t.result.ok);
   // Поставлена генерация — текст пишет код: «рисую», а не «добавил».
   // Модель отчитывается о результате, которого ещё нет (см. progress-text.ts).
-  const progress = progressReply(result.text, cardSent);
+  // Именно по результату инструмента, а не по cardSent: тот признак ставит и
+  // выдача задания, и на ней «рисую» было ложью в другую сторону.
+  const progress = progressReply(result.text, generationPlaced(result.toolCalls));
   const capped = capReply(progress.text, { drawing: drew });
 
   if (capped.cut) {
