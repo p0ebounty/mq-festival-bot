@@ -18,7 +18,9 @@ describe('приветствие на /start', () => {
     const t = greetingText('Аня', { balance: 10, costPerImage: 1 });
     expect(t).not.toContain('три вещи');
     expect(t).not.toMatch(/^- /m);
-    expect(t).toContain('готовый мир');
+    expect(t).toContain('задание');
+    // Свободных миров в игре с 05.09 нет — приветствие про них молчит.
+    expect(t).not.toContain('готовый мир');
     expect(t).toContain('с нуля');
     expect(t).toContain('это только примеры'.replace('э', 'Э'));
   });
@@ -65,7 +67,8 @@ describe('склонение после числа', () => {
 describe('/help', () => {
   it('описывает возможности примерами и честно говорит, что список открыт', () => {
     const t = helpText(1, 3);
-    expect(t).toContain('готовый мир');
+    expect(t).toContain('задание');
+    expect(t).not.toContain('готовый мир');
     expect(t).toContain('с нуля');
     expect(t).toContain('Список открытый');
     expect(t).not.toMatch(/^- /m);   // буллиты читались как меню
@@ -102,7 +105,7 @@ describe('/balance', () => {
 
   it('объясняет, за что НЕ списывают — про это и спрашивают', () => {
     const t = balanceText(10, 1, 3);
-    expect(t).toContain('Готовый мир бесплатный');
+    expect(t).toContain('Задание бесплатное');
     expect(t).toContain('возвращается');
   });
 

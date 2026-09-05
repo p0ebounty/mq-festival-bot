@@ -14,7 +14,6 @@ import { makeGetBalanceTool } from './agent/tools/get-balance.js';
 import { makeGenerateImageTool } from './agent/tools/generate-image.js';
 import { makeEditImageTool } from './agent/tools/edit-image.js';
 import { makeSuggestTool } from './agent/tools/suggest.js';
-import { makeGetBaseWorldTool } from './agent/tools/base-world.js';
 import { makeGetTaskTool } from './agent/tools/get-task.js';
 import { makeVerifySocialTool } from './agent/tools/verify-social.js';
 import { closeBrowser } from './social/page-fetch.js';
@@ -54,7 +53,8 @@ ctx.registry
   .register(makeGetBalanceTool(ctx))
   .register(makeGenerateImageTool(ctx))
   .register(makeEditImageTool(ctx))
-  .register(makeGetBaseWorldTool(ctx))
+  // get_base_world намеренно НЕ регистрируется с 05.09: заказчик убрал
+  // свободные миры из игры, стартовая картинка — это задание (STATE.md).
   .register(makeGetTaskTool(ctx))
   .register(makeVerifySocialTool(ctx))
   .register(makeSuggestTool());

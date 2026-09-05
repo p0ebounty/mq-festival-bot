@@ -142,7 +142,7 @@ export async function handleIncoming(
     tokenBalance: user.tokenBalance,
     costPerImage,
     imageCount: images.length,
-    hasWorld: images.some((i) => i.isWorld),
+    hasWorld: images.some((i) => i.isWorld || Boolean(i.taskId)),
     hasUserPhoto: images.some((i) => i.origin === 'user'),
   });
 
