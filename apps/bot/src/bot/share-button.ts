@@ -6,7 +6,8 @@ import type { AppContext } from '../context.js';
 import { env } from './../env.js';
 
 /** Префикс callback_data. Всё вместе — 42 байта, лимит Telegram 64. */
-const PREFIX = 'share:';
+export const SHARE_PREFIX = 'share:';
+const PREFIX = SHARE_PREFIX;
 
 const LABEL = 'Скачать и поделиться';
 /** Пока картинка рисуется — тот же текст со знаком запрета. */
