@@ -9,6 +9,7 @@ import { prepareMessage } from './format.js';
 import { ingestPhoto } from './media.js';
 import { decodeSuggestion, suggestionKeyboard, SUGGEST_PATTERN } from './suggest-button.js';
 import { cmdStart, cmdHelp, cmdBalance, greetingText, type CommandInput, type CommandReply } from './commands.js';
+import { sleepGate } from './sleep.js';
 
 /**
  * Что уходит агенту вместо подписи, когда фото прислали молча.
@@ -36,6 +37,11 @@ export function createBot(app: AppContext, log: FastifyBaseLogger): { bot: Bot; 
   // Раз в 10 минут подчищаем счётчики, чтобы карта не росла всю смену.
   const sweeper = setInterval(() => gate.sweep(), 10 * 60_000);
   sweeper.unref?.();
+
+  // Заслон «фестиваль закончился» стоит ПЕРВЫМ: когда бот спит, ни одна
+  // реплика ниже не должна дойти ни до модели, ни до генератора. Кнопку
+  // «поделиться» (регистрируется позже, в index.ts) он пропускает — см. sleep.ts.
+  bot.use(sleepGate(app, log));
 
   /**
    * Команды меню отвечают СРАЗУ и без модели — см. `commands.ts`, там же почему.

@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2Icon, KeyRoundIcon, XCircleIcon } from 'lucide-react';
+import { CheckCircle2Icon, KeyRoundIcon, MoonIcon, XCircleIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
@@ -36,6 +37,7 @@ export function SettingsView({ initial, routes }: Props) {
 
   const keyRow = rows['kie.apiKey'];
   const keyIsSet = keyRow?.hasValue ?? false;
+  const asleep = rows['bot.mode']?.value === 'asleep';
 
   async function save(key: string, value: string) {
     setSaving(key);
@@ -107,6 +109,37 @@ export function SettingsView({ initial, routes }: Props) {
         {/* ───────────── Провайдер ───────────── */}
         <TabsContent value="provider">
           <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MoonIcon className="size-4" />
+                  Режим бота
+                  {asleep ? (
+                    <Badge variant="secondary">спит</Badge>
+                  ) : (
+                    <Badge>работает</Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  Спящий бот на любое сообщение отвечает, что фестиваль закончился, и
+                  не зовёт ни модель, ни генератор. Кнопка «Скачать и поделиться»,
+                  страницы результатов и QR-коды продолжают работать. Подхватывается
+                  за десять секунд, без перезапуска.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Field orientation="horizontal">
+                  <Switch
+                    id="bot-asleep"
+                    checked={asleep}
+                    disabled={saving === 'bot.mode'}
+                    onCheckedChange={(checked) => void save('bot.mode', checked ? 'asleep' : 'awake')}
+                  />
+                  <FieldLabel htmlFor="bot-asleep">Бот спит — фестиваль закончился</FieldLabel>
+                </Field>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
